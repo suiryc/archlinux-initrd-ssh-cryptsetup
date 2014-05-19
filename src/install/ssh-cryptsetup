@@ -1,0 +1,113 @@
+#!/bin/bash
+
+sshcs_check_nonempty() {
+    local filepath="$1"
+
+    [ -e "${filepath}" ] && grep -q -v '^\s*\(#\|$\)' "${filepath}"
+}
+
+sshcs_check_keys() {
+    local dropbear_keyfile
+    local openssh_keyfile
+    local fingerprint
+
+    for keytype in "${dropbear_key_types[@]}"; do
+        dropbear_keyfile=${dropbear_keyfile_prefix}${keytype}${dropbear_keyfile_suffix}
+        openssh_keyfile=${openssh_keyfile_prefix}${keytype}${openssh_keyfile_suffix}
+
+        # Prefer OpenSSH keys, or generate missing ones
+        if [ -e "${openssh_keyfile}" ]; then
+            #echo "Copying OpenSSH ${keytype} host key for dropbear ..."
+            dropbearconvert openssh dropbear "${openssh_keyfile}" "${dropbear_keyfile}" > /dev/null 2>&1
+        elif [ ! -e "${dropbear_keyfile}" ]; then
+            #echo "Generating ${keytype} host key for dropbear ..."
+            dropbearkey -t "${keytype}" -f "${dropbear_keyfile}" > /dev/null 2>&1
+        fi
+        fingerprint=$(dropbearkey -y -f "${dropbear_keyfile}" | sed -n '/^Fingerprint:/ {s/Fingerprint: *//; p}')
+        echo "$(basename "${dropbear_keyfile}") : ${fingerprint}"
+    done
+}
+
+build() {
+    local etc_crypttab="/etc/crypttab"
+    local dropbear_authorized_keys="/etc/dropbear/initrd.authorized_keys"
+    local dropbear_env="/etc/dropbear/initrd.env"
+    local dropbear_key_types=( "dss" "rsa" "ecdsa" )
+    local dropbear_keyfile_prefix="/etc/dropbear/dropbear_"
+    local dropbear_keyfile_suffix="_host_key"
+    local openssh_keyfile_prefix="/etc/ssh/ssh_host_"
+    local openssh_keyfile_suffix="_key"
+
+    # Check we are needed
+    if ! sshcs_check_nonempty "${dropbear_authorized_keys}"; then
+        echo "There is no root key(s) in ${dropbear_authorized_keys}. Skipping."
+        return 0
+    fi
+    if ! sshcs_check_nonempty "${etc_crypttab}"; then
+        echo "There is no device in ${etc_crypttab}. Skipping."
+        return 0
+    fi
+
+    umask 0022
+
+    sshcs_check_keys
+
+    add_checked_modules "/drivers/net/"
+    add_module dm-crypt
+    # Note: crypto modules are necessary
+    if [ -n "${CRYPTO_MODULES}" ]; then
+        local mod
+        for mod in ${CRYPTO_MODULES}; do
+            add_module "${mod}"
+        done
+    else
+        add_all_modules "/crypto/"
+    fi
+
+    # Note: dmsetup is necessary for device mapper features
+    add_binary "cryptsetup"
+    add_binary "dmsetup"
+    add_binary "dropbear"
+    add_binary "ip"
+    add_binary "/usr/lib/initcpio/ipconfig" "/sbin/ipconfig"
+    add_binary "killall"
+
+    # auth-related files
+    add_file "/lib/libnss_files.so"
+
+    # SSH-related files
+    add_file "${dropbear_authorized_keys}" "/root/.ssh/authorized_keys"
+    [ -e "${dropbear_env}" ] && add_file "${dropbear_env}"
+    add_file "/etc/dropbear/dropbear_rsa_host_key"
+    add_file "/etc/dropbear/dropbear_dss_host_key"
+    add_file "/etc/dropbear/dropbear_ecdsa_host_key"
+
+    # cryptsetup-related files
+    add_file "${etc_crypttab}"
+    add_file "/usr/lib/udev/rules.d/10-dm.rules"
+    add_file "/usr/lib/udev/rules.d/13-dm-disk.rules"
+    add_file "/usr/lib/udev/rules.d/95-dm-notify.rules"
+    add_file "/usr/lib/initcpio/udev/11-dm-initramfs.rules" "/usr/lib/udev/rules.d/11-dm-initramfs.rules"
+
+
+    add_runscript
+}
+
+help() {
+    cat <<EOF
+This hook allows for LUKS encrypted devices to be unlocked either locally
+(boot console) or remotely over SSH.
+
+Network is configured with 'ip=' kernel parameter (see 'mkinitcpio-nfs-utils').
+Authorized SSH key(s) must be present in '/etc/dropbear/initrd.authorized_keys'.
+LUKS encrypted devices to unlock are derived from '/etc/crypttab', which must
+be present.
+Listening port (if not 22) can be set with the option 'sshcs_opt_listen' in
+'/etc/dropbear/initrd.env' (file is sourced in initrd shell).
+
+Each SSH server key ('dropbear_rsa_host_key', 'dropbear_dss_host_key' and
+'dropbear_ecdsa_host_key' in '/etc/dropbear' folder) is imported from OpenSSH
+if present or generated if missing. Fingerprints are displayed upon building
+the initramfs image.
+EOF
+}

@@ -1,0 +1,231 @@
+#!/usr/bin/ash
+
+sshcs_net_start() {
+    # we must have an 'ip' setting, and a device in it
+    [ -z "${ip}" ] && [ -n "${nfsaddrs}" ] && ip="${nfsaddrs}"
+    [ -z "${ip}" ] && return 1
+
+    net_device=$(echo ${ip} | cut -d: -f6)
+    [ -z "${net_device}" ] && return 1
+
+    # Setup network and save some values
+    # Note: some useful redirection means ('< <(...)' and '<<< "$(...)"') are
+    # not supported in the available shell. So we have to write code in a
+    # temporary file and 'source' it since '... | while read ...' spawns a
+    # subshell from which outer variables cannot be altered.
+    : > "${net_env}"
+    ipconfig "ip=${ip}" | while read line; do
+        [ "${line#"IP-Config:"}" != "${line}" ] && continue
+
+        line="$(echo "${line}" | sed -e 's/ :/:/g;s/: /=/g')"
+
+        for iparg in ${line}; do
+            case "${iparg}" in
+                address=*|netmask=*|gateway=*|dns0=*|dns1=*)
+                    echo "net_${iparg}" >> "${net_env}"
+                    ;;
+            esac
+        done
+    done
+
+    . "${net_env}"
+    rm -f "${net_env}"
+
+    echo "IP-Config: device=${net_device} ip=${net_address}/${net_netmask} gw=${net_gateway} dns0=${net_dns0} dns1=${net_dns1}"
+
+    [ -n "${net_address}" ]
+}
+
+sshcs_dropbear_unlock() {
+    local dev_pts_mounted=0
+    local listen=
+
+    # ensure /dev/pts is present
+    if [ ! -d "/dev/pts" ]; then
+        mkdir -p "/dev/pts"
+        mount -t devpts devpts "/dev/pts"
+        dev_pts_mounted=1
+    fi
+
+    # /etc/passwd file for the root user
+    echo "root:x:0:0:root:/root:${dropbear_login_shell}" > "/etc/passwd"
+    echo "${dropbear_login_shell}" > "/etc/shells"
+
+    # root login script
+    cat <<EOF > "${dropbear_login_shell}"
+#!/usr/bin/ash
+
+. "/init_functions"
+
+if [ ! -f "${dropbear_cryptsetup_script}" ]; then
+    err "No cryptsetup script present! Please retry."
+    exit 0
+fi
+
+if [ -c "/dev/mapper/control" ]; then
+    CSQUIET=
+    . "${dropbear_cryptsetup_script}"
+
+    echo ""
+    echo "cryptsetup succeeded! Boot sequence should go on."
+    echo "Please wait and retry for standard SSH service."
+else
+    err "Device resources missing! Please retry."
+fi
+echo ""
+EOF
+    chmod a+x "${dropbear_login_shell}"
+
+    [ ! -d "/var/log" ] && mkdir -p "/var/log"
+    touch "/var/log/lastlog"
+
+    [ -e "${dropbear_env}" ] && . "${dropbear_env}"
+    [ -n "${sshcs_opt_listen}" ] && sshcs_opt_listen="-p ${sshcs_opt_listen}"
+
+
+    msg "Starting dropbear ..."
+    dropbear -Emsgjk -P "${path_dropbear_pid}" ${sshcs_opt_listen}
+
+    # actual script (shared with SSH login) unlocking encrypted devices
+    . "${dropbear_cryptsetup_script}"
+
+    # cleanup dropbear
+    if [ -f "${path_dropbear_pid}" ]; then
+        msg "Stopping dropbear ..."
+        kill $(cat "${path_dropbear_pid}")
+        rm -f "${path_dropbear_pid}"
+    fi
+    rm -f "${dropbear_cryptsetup_script}" "${dropbear_login_shell}" "/etc/passwd" "/etc/shells" "/var/log/lastlog"
+
+    # cleanup /dev/pts if necessary
+    if [ ${dev_pts_mounted} -ne 0 ]; then
+        umount "/dev/pts"
+        rm -R "/dev/pts"
+    fi
+}
+
+sshcs_net_done() {
+    # we are done with the network
+    if [ -n "${net_device}" ]; then
+        ip addr flush dev "${net_device}"
+        ip link set dev "${net_device}" down
+    fi
+}
+
+sshcs_cryptpart_process() {
+    # ensure there is a device (handle 'UUID=' format)
+    [ -z "${cryptdev}" ] && return 0
+    [ "${cryptdev#UUID=}" != "${cryptdev}" ] && cryptdev="/dev/disk/by-uuid/${cryptdev#UUID=}"
+
+    # get crypt options
+    cryptargs=
+    for cryptopt in ${cryptoptions//,/ }; do
+        case ${cryptopt} in
+            allow-discards)
+                cryptargs="${cryptargs} --allow-discards"
+                ;;
+
+            luks)
+                ;;
+
+            *)
+                echo "Device ${cryptdev} encryption option '${cryptopt}' not known, ignoring."
+                ;;
+        esac
+    done
+
+    # ensure device is encrypted and handled
+    cryptdev_orig=${cryptdev}
+    if cryptdev=$(resolve_device "${cryptdev_orig}" ${rootdelay}); then
+        if cryptsetup isLuks "${cryptdev}" >/dev/null 2>&1; then
+
+            # update script used to unlock device either in console or SSH
+            [ -s "${dropbear_cryptsetup_script}" ] || cat <<EOF > "${dropbear_cryptsetup_script}"
+cycle_or_retry() {
+    local res
+
+    read -n 1 -s -t 5 -p "Whithin 5s press 'P' to poweroff, 'R' to reboot or any other key to retry. " res
+    echo ""
+    if [ "\${res}" = "P" ]; then
+        poweroff -f
+    elif [ "\${res}" = "R" ]; then
+        reboot -f
+    fi
+}
+EOF
+
+            cat <<EOF >> "${dropbear_cryptsetup_script}"
+# loop until device is available
+while [ ! -e "/dev/mapper/${cryptname}" ]; do
+    if cryptsetup open --type "${crypttype}" "${cryptdev}" "${cryptname}" "${cryptargs}" "\${CSQUIET}"; then
+        if poll_device "/dev/mapper/${cryptname}" ${rootdelay}; then
+            killall cryptsetup > /dev/null 2>&1
+            break
+        fi
+        err "Device still not mapped! Please wait or retry."
+    elif [ ! -e "/dev/mapper/${cryptname}" ]; then
+        err "cryptsetup failed! Please retry."
+    else
+        break
+    fi
+
+    cycle_or_retry
+done
+EOF
+        else
+            err "Failed to manage encrypted device ${cryptdev_orig}: not a LUKS volume."
+        fi
+    fi
+}
+
+
+run_hook() {
+    local etc_crypttab="/etc/crypttab"
+    local dropbear_env="/etc/dropbear/initrd.env"
+    local path_dropbear_pid="/.dropbear.pid"
+    local dropbear_login_shell="/.cryptsetup_shell.sh"
+    local dropbear_cryptsetup_script="/.cryptsetup_script.sh"
+    local net_env="/.net_env.sh"
+    local line iparg net_address net_netmask net_gateway net_dns0 net_dns1
+    local cryptdev cryptdev_orig crypttype cryptname cryptpass cryptoptions cryptopt cryptargs CSQUIET
+
+    # sanity check: crypttab should be present
+    [ ! -e "${etc_crypttab}" ] && return 0
+
+    modprobe -a -q dm-crypt >/dev/null 2>&1
+    [ "${quiet}" = "y" ] && CSQUIET=">/dev/null"
+
+    umask 0022
+
+    # start and check network
+    if ! sshcs_net_start; then
+        err "Net interface not available! Skipping crypt remote unlocking."
+        # stop the network if possible
+        sshcs_net_done
+        return 0
+    fi
+
+    # check encrypted devices to handle
+    cryptdev=
+    crypttype=luks
+    while read cryptname cryptdev cryptpass cryptoptions; do
+        # skip comment lines
+        [ "${cryptname:0:1}" = "#" ] && continue
+        # skip devices with given password
+        [ -n "${cryptpass}" ] && [ "${cryptpass}" != "none" ] && [ "${cryptpass}" != "-" ] && continue
+
+        sshcs_cryptpart_process
+    done < "${etc_crypttab}"
+
+    if [ ! -e "${dropbear_cryptsetup_script}" ]; then
+        err "No encrypted device found! Skipping crypt remote unlocking."
+        # don't forget to stop the network
+        sshcs_net_done
+        return 0
+    fi
+
+    # time to unlock (through console or dropbear)
+    sshcs_dropbear_unlock
+    # stop the network before going on in boot sequence
+    sshcs_net_done
+}
