@@ -36,7 +36,41 @@ sshcs_net_start() {
     [ -n "${net_address}" ]
 }
 
+sshcs_trapped_timeout() {
+    err "Timeout reached! Powering off."
+    poweroff -f
+    exit
+}
+
+sshcs_trap_timeout() {
+    local pid_init=$$
+
+    if [ ${sshcs_opt_timeout_poweroff} -gt 0 ]; then
+        echo ""
+        echo "WARNING! Automatic poweroff will be triggered in ${sshcs_opt_timeout_poweroff}s"
+        echo "To deactivate, please unlock devices"
+        echo ""
+        trap sshcs_trapped_timeout SIGALRM
+        (
+            sleep ${sshcs_opt_timeout_poweroff}
+            kill -SIGALRM ${pid_init}
+            # Signal is not processed if cryptsetup is waiting for the password
+            killall cryptsetup > /dev/null 2>&1
+        ) &
+        pid_timeout=$!
+    fi
+}
+
+sshcs_untrap_timeout() {
+    [ -z "${pid_timeout}" ] && return 0
+    kill ${pid_timeout}
+    trap - SIGALRM
+    msg "Timeout cleared."
+}
+
 sshcs_dropbear_unlock() {
+    local timeout_poweroff_min=120
+    local pid_timeout=
     local dev_pts_mounted=0
     local listen=
 
@@ -81,13 +115,19 @@ EOF
 
     [ -e "${dropbear_env}" ] && . "${dropbear_env}"
     [ -n "${sshcs_opt_listen}" ] && sshcs_opt_listen="-p ${sshcs_opt_listen}"
+    [ -z "${sshcs_opt_timeout_poweroff}" ] && sshcs_opt_timeout_poweroff=${timeout_poweroff_min}
+    [ ${sshcs_opt_timeout_poweroff} -ge 0 ] && [ ${sshcs_opt_timeout_poweroff} -lt ${timeout_poweroff_min} ] && sshcs_opt_timeout_poweroff=${timeout_poweroff_min}
 
 
     msg "Starting dropbear ..."
     dropbear -Emsgjk -P "${path_dropbear_pid}" ${sshcs_opt_listen}
 
+    sshcs_trap_timeout
+
     # actual script (shared with SSH login) unlocking encrypted devices
     . "${dropbear_cryptsetup_script}"
+
+    sshcs_untrap_timeout
 
     # cleanup dropbear
     if [ -f "${path_dropbear_pid}" ]; then
@@ -177,7 +217,6 @@ EOF
         fi
     fi
 }
-
 
 run_hook() {
     local etc_crypttab="/etc/crypttab"

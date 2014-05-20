@@ -101,8 +101,13 @@ Network is configured with 'ip=' kernel parameter (see 'mkinitcpio-nfs-utils').
 Authorized SSH key(s) must be present in '/etc/dropbear/initrd.authorized_keys'.
 LUKS encrypted devices to unlock are derived from '/etc/crypttab', which must
 be present.
-Listening port (if not 22) can be set with the option 'sshcs_opt_listen' in
-'/etc/dropbear/initrd.env' (file is sourced in initrd shell).
+Some options can be set in '/etc/dropbear/initrd.env' (file is sourced in
+initrd shell):
+ * 'sshcs_opt_listen': listening port (22 by default)
+ * 'sshcs_opt_timeout_poweroff': time (s) to unlock devices before automatic
+   powering off
+   - default (and minimum value): 2 minutes
+   - negative value to deactivate
 
 Each SSH server key ('dropbear_rsa_host_key', 'dropbear_dss_host_key' and
 'dropbear_ecdsa_host_key' in '/etc/dropbear' folder) is imported from OpenSSH
