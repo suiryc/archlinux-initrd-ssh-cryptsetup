@@ -70,7 +70,6 @@ build() {
     add_binary "dropbear"
     add_binary "ip"
     add_binary "/usr/lib/initcpio/ipconfig" "/sbin/ipconfig"
-    add_binary "killall"
 
     # auth-related files
     add_file "/lib/libnss_files.so"
