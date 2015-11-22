@@ -1,3 +1,10 @@
+2015-11-22 Julien Coloos <julien.coloos [at] gmail [dot] com>
+
+	* v0.3-1
+	Added configurable timeout for ipconfig
+        Moved configuration file from /etc/dropbear/initrd.env to /etc/initcpio/sshcs_env
+
+
 2014-05-20 Julien Coloos <julien.coloos [at] gmail [dot] com>
 
 	* v0.2-1
