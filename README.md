@@ -15,7 +15,9 @@ As explained upon installation, the following things need to be done:
 The LUKS-encrypted devices to unlock are derived from `/etc/crypttab`.
 
 
-Some options can be set in `/etc/dropbear/initrd.env` (file is sourced in initrd shell):
+Some options can be set in `/etc/initcpio/sshcs_env` (file is sourced in initrd shell):
+  * `sshcs_opt_timeout_ipconfig`: time (in seconds) to configure IP
+    - default: 10 seconds
   * `sshcs_opt_listen`: SSH listening port
     - default: 22
   * `sshcs_opt_timeout_poweroff`: time (in seconds) to unlock devices before automatic powering off
@@ -24,6 +26,7 @@ Some options can be set in `/etc/dropbear/initrd.env` (file is sourced in initrd
 
 For example:
 
+    sshcs_opt_timeout_ipconfig=30
     sshcs_opt_listen=2222
     sshcs_opt_timeout_poweroff=-1
 

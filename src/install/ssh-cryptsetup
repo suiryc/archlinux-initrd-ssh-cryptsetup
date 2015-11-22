@@ -31,7 +31,7 @@ sshcs_check_keys() {
 build() {
     local etc_crypttab="/etc/crypttab"
     local dropbear_authorized_keys="/etc/dropbear/initrd.authorized_keys"
-    local dropbear_env="/etc/dropbear/initrd.env"
+    local sshcs_env="/etc/initcpio/sshcs_env"
     local dropbear_key_types=( "dss" "rsa" "ecdsa" )
     local dropbear_keyfile_prefix="/etc/dropbear/dropbear_"
     local dropbear_keyfile_suffix="_host_key"
@@ -71,12 +71,14 @@ build() {
     add_binary "ip"
     add_binary "/usr/lib/initcpio/ipconfig" "/sbin/ipconfig"
 
+    # Our hook files
+    [ -e "${sshcs_env}" ] && add_file "${sshcs_env}"
+
     # auth-related files
     add_file "/lib/libnss_files.so"
 
     # SSH-related files
     add_file "${dropbear_authorized_keys}" "/root/.ssh/authorized_keys"
-    [ -e "${dropbear_env}" ] && add_file "${dropbear_env}"
     add_file "/etc/dropbear/dropbear_rsa_host_key"
     add_file "/etc/dropbear/dropbear_dss_host_key"
     add_file "/etc/dropbear/dropbear_ecdsa_host_key"
@@ -101,8 +103,10 @@ Network is configured with 'ip=' kernel parameter (see 'mkinitcpio-nfs-utils').
 Authorized SSH key(s) must be present in '/etc/dropbear/initrd.authorized_keys'.
 LUKS encrypted devices to unlock are derived from '/etc/crypttab', which must
 be present.
-Some options can be set in '/etc/dropbear/initrd.env' (file is sourced in
+Some options can be set in '/etc/initcpio/sshcs_env' (file is sourced in
 initrd shell):
+ * 'sshcs_opt_timeout_ipconfig': time (s) to configure IP
+   - default: 10 seconds
  * 'sshcs_opt_listen': listening port (22 by default)
  * 'sshcs_opt_timeout_poweroff': time (s) to unlock devices before automatic
    powering off

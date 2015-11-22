@@ -1,8 +1,17 @@
 #!/bin/bash
 
 post_install() {
+    local sshcs_env="/etc/initcpio/sshcs_env"
+    local sshcs_env_old="/etc/dropbear/initrd.env"
     local dropbear_authorized_keys="/etc/dropbear/initrd.authorized_keys"
     local etc_dropbear=$(dirname "${dropbear_authorized_keys}")
+    [ ! -e "${sshcs_env}" ] && [ -e "${sshcs_env_old}" ] && {
+        [ -d $(dirname "${sshcs_env}") ] || mkdir -p $(dirname "${sshcs_env}")
+        mv "${sshcs_env_old}" "${sshcs_env}"
+    cat <<EOF
+    Moved legacy file ${sshcs_env_old} to new path ${sshcs_env}"
+EOF
+    }
     [ -d "${etc_dropbear}" ] || mkdir -p "${etc_dropbear}"
     [ -e "${dropbear_authorized_keys}" ] || touch "${dropbear_authorized_keys}"
     chmod 600 "${dropbear_authorized_keys}"

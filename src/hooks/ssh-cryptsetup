@@ -1,5 +1,16 @@
 #!/usr/bin/ash
 
+sshcs_env_load() {
+    local timeout_ipconfig_default=10
+    local timeout_poweroff_min=120
+
+    [ -e "${sshcs_env}" ] && . "${sshcs_env}"
+    [ -z "${sshcs_opt_timeout_ipconfig}" ] && sshcs_opt_timeout_ipconfig=${timeout_ipconfig_default}
+    [ -n "${sshcs_opt_listen}" ] && sshcs_opt_listen="-p ${sshcs_opt_listen}"
+    [ -z "${sshcs_opt_timeout_poweroff}" ] && sshcs_opt_timeout_poweroff=${timeout_poweroff_min}
+    [ ${sshcs_opt_timeout_poweroff} -ge 0 ] && [ ${sshcs_opt_timeout_poweroff} -lt ${timeout_poweroff_min} ] && sshcs_opt_timeout_poweroff=${timeout_poweroff_min}
+}
+
 sshcs_net_start() {
     # we must have an 'ip' setting, and a device in it
     [ -z "${ip}" ] && [ -n "${nfsaddrs}" ] && ip="${nfsaddrs}"
@@ -14,7 +25,16 @@ sshcs_net_start() {
     # temporary file and 'source' it since '... | while read ...' spawns a
     # subshell from which outer variables cannot be altered.
     : > "${net_env}"
-    ipconfig "ip=${ip}" | while read line; do
+
+    echo ""
+    echo "Configuring IP (timeout = ${sshcs_opt_timeout_ipconfig}s) ..."
+    ipconfig_out=$(ipconfig -t "${sshcs_opt_timeout_ipconfig}" "ip=${ip}")
+    if [ $? -ne 0 ]; then
+        err "IP configuration timeout!"
+        return 1
+    fi
+
+    echo -n "${ipconfig_out}" | while read line; do
         [ "${line#"IP-Config:"}" != "${line}" ] && continue
 
         line="$(echo "${line}" | sed -e 's/ :/:/g;s/: /=/g')"
@@ -34,6 +54,14 @@ sshcs_net_start() {
     echo "IP-Config: device=${net_device} ip=${net_address}/${net_netmask} gw=${net_gateway} dns0=${net_dns0} dns1=${net_dns1}"
 
     [ -n "${net_address}" ]
+}
+
+sshcs_net_done() {
+    # we are done with the network
+    if [ -n "${net_device}" ]; then
+        ip addr flush dev "${net_device}"
+        ip link set dev "${net_device}" down
+    fi
 }
 
 sshcs_trapped_timeout() {
@@ -68,8 +96,16 @@ sshcs_untrap_timeout() {
     msg "Timeout cleared."
 }
 
+sshcs_unlock() {
+    sshcs_trap_timeout
+
+    # actual script (shared with SSH login) unlocking encrypted devices
+    . "${sshcs_cryptsetup_script}"
+
+    sshcs_untrap_timeout
+}
+
 sshcs_dropbear_unlock() {
-    local timeout_poweroff_min=120
     local pid_timeout=
     local dev_pts_mounted=0
     local listen=
@@ -91,14 +127,14 @@ sshcs_dropbear_unlock() {
 
 . "/init_functions"
 
-if [ ! -f "${dropbear_cryptsetup_script}" ]; then
+if [ ! -f "${sshcs_cryptsetup_script}" ]; then
     err "No cryptsetup script present! Please retry."
     exit 0
 fi
 
 if [ -c "/dev/mapper/control" ]; then
     CSQUIET=
-    . "${dropbear_cryptsetup_script}"
+    . "${sshcs_cryptsetup_script}"
 
     echo ""
     echo "cryptsetup succeeded! Boot sequence should go on."
@@ -113,21 +149,11 @@ EOF
     [ ! -d "/var/log" ] && mkdir -p "/var/log"
     touch "/var/log/lastlog"
 
-    [ -e "${dropbear_env}" ] && . "${dropbear_env}"
-    [ -n "${sshcs_opt_listen}" ] && sshcs_opt_listen="-p ${sshcs_opt_listen}"
-    [ -z "${sshcs_opt_timeout_poweroff}" ] && sshcs_opt_timeout_poweroff=${timeout_poweroff_min}
-    [ ${sshcs_opt_timeout_poweroff} -ge 0 ] && [ ${sshcs_opt_timeout_poweroff} -lt ${timeout_poweroff_min} ] && sshcs_opt_timeout_poweroff=${timeout_poweroff_min}
-
-
     msg "Starting dropbear ..."
     dropbear -Emsgjk -P "${path_dropbear_pid}" ${sshcs_opt_listen}
 
-    sshcs_trap_timeout
-
-    # actual script (shared with SSH login) unlocking encrypted devices
-    . "${dropbear_cryptsetup_script}"
-
-    sshcs_untrap_timeout
+    # Actual unlocking
+    sshcs_unlock
 
     # cleanup dropbear
     if [ -f "${path_dropbear_pid}" ]; then
@@ -135,20 +161,12 @@ EOF
         kill $(cat "${path_dropbear_pid}")
         rm -f "${path_dropbear_pid}"
     fi
-    rm -f "${dropbear_cryptsetup_script}" "${dropbear_login_shell}" "/etc/passwd" "/etc/shells" "/var/log/lastlog"
+    rm -f "${sshcs_cryptsetup_script}" "${dropbear_login_shell}" "/etc/passwd" "/etc/shells" "/var/log/lastlog"
 
     # cleanup /dev/pts if necessary
     if [ ${dev_pts_mounted} -ne 0 ]; then
         umount "/dev/pts"
         rm -R "/dev/pts"
-    fi
-}
-
-sshcs_net_done() {
-    # we are done with the network
-    if [ -n "${net_device}" ]; then
-        ip addr flush dev "${net_device}"
-        ip link set dev "${net_device}" down
     fi
 }
 
@@ -180,7 +198,7 @@ sshcs_cryptpart_process() {
         if cryptsetup isLuks "${cryptdev}" >/dev/null 2>&1; then
 
             # update script used to unlock device either in console or SSH
-            [ -s "${dropbear_cryptsetup_script}" ] || cat <<EOF > "${dropbear_cryptsetup_script}"
+            [ -s "${sshcs_cryptsetup_script}" ] || cat <<EOF > "${sshcs_cryptsetup_script}"
 cycle_or_retry() {
     local res
 
@@ -194,7 +212,7 @@ cycle_or_retry() {
 }
 EOF
 
-            cat <<EOF >> "${dropbear_cryptsetup_script}"
+            cat <<EOF >> "${sshcs_cryptsetup_script}"
 # loop until device is available
 while [ ! -e "/dev/mapper/${cryptname}" ]; do
     if cryptsetup open --type "${crypttype}" "${cryptdev}" "${cryptname}" "${cryptargs}" "\${CSQUIET}"; then
@@ -220,13 +238,16 @@ EOF
 
 run_hook() {
     local etc_crypttab="/etc/crypttab"
-    local dropbear_env="/etc/dropbear/initrd.env"
+    local sshcs_env="/etc/initcpio/sshcs_env"
     local path_dropbear_pid="/.dropbear.pid"
     local dropbear_login_shell="/.cryptsetup_shell.sh"
-    local dropbear_cryptsetup_script="/.cryptsetup_script.sh"
+    local sshcs_cryptsetup_script="/.cryptsetup_script.sh"
     local net_env="/.net_env.sh"
-    local line iparg net_address net_netmask net_gateway net_dns0 net_dns1
+    local line iparg net_address net_device ipconfig_out net_netmask net_gateway net_dns0 net_dns1
     local cryptdev cryptdev_orig crypttype cryptname cryptpass cryptoptions cryptopt cryptargs CSQUIET
+
+    # Load our options
+    sshcs_env_load
 
     # sanity check: crypttab should be present
     [ ! -e "${etc_crypttab}" ] && return 0
@@ -235,14 +256,6 @@ run_hook() {
     [ "${quiet}" = "y" ] && CSQUIET=">/dev/null"
 
     umask 0022
-
-    # start and check network
-    if ! sshcs_net_start; then
-        err "Net interface not available! Skipping crypt remote unlocking."
-        # stop the network if possible
-        sshcs_net_done
-        return 0
-    fi
 
     # check encrypted devices to handle
     cryptdev=
@@ -256,9 +269,17 @@ run_hook() {
         sshcs_cryptpart_process
     done < "${etc_crypttab}"
 
-    if [ ! -e "${dropbear_cryptsetup_script}" ]; then
+    if [ ! -e "${sshcs_cryptsetup_script}" ]; then
         err "No encrypted device found! Skipping crypt remote unlocking."
-        # don't forget to stop the network
+        return 0
+    fi
+
+    # start and check network
+    if ! sshcs_net_start; then
+        err "Net interface not available! Skipping crypt remote unlocking."
+        # We still allow to unlock locally with timeout
+        sshcs_unlock
+        # stop the network if possible
         sshcs_net_done
         return 0
     fi
