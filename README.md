@@ -16,6 +16,9 @@ The LUKS-encrypted devices to unlock are derived from `/etc/crypttab`.
 
 
 Some options can be set in `/etc/initcpio/sshcs_env` (file is sourced in initrd shell):
+   * `sshcs_opt_debug`: whether to be more verbose about ongoing actions
+      - default: 0
+      - any non-zero value to enable
    * `sshcs_opt_timeout_ipconfig`: time (in seconds) to configure IP
       - default: 10 seconds
    * `sshcs_opt_listen`: SSH listening port

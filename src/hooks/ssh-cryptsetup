@@ -1,10 +1,16 @@
 #!/usr/bin/ash
 
+dbg () {
+    [ ${sshcs_opt_debug} != 0 ] && echo "$@"
+}
+
 sshcs_env_load() {
+    local debug_default=0
     local timeout_ipconfig_default=10
     local timeout_poweroff_min=120
 
     [ -e "${sshcs_env}" ] && . "${sshcs_env}"
+    [ -z "${sshcs_opt_debug}" ] && sshcs_opt_debug=${debug_default}
     [ -z "${sshcs_opt_timeout_ipconfig}" ] && sshcs_opt_timeout_ipconfig=${timeout_ipconfig_default}
     [ -n "${sshcs_opt_listen}" ] && sshcs_opt_listen="-p ${sshcs_opt_listen}"
     [ -z "${sshcs_opt_timeout_poweroff}" ] && sshcs_opt_timeout_poweroff=${timeout_poweroff_min}
@@ -14,10 +20,16 @@ sshcs_env_load() {
 sshcs_net_start() {
     # we must have an 'ip' setting, and a device in it
     [ -z "${ip}" ] && [ -n "${nfsaddrs}" ] && ip="${nfsaddrs}"
-    [ -z "${ip}" ] && return 1
+    [ -z "${ip}" ] && {
+        dbg "No ip setting to setup network"
+        return 1
+    }
 
     net_device=$(echo ${ip} | cut -d: -f6)
-    [ -z "${net_device}" ] && return 1
+    [ -z "${net_device}" ] && {
+        dbg "No network device to setup"
+        return 1
+    }
 
     # Setup network and save some values
     # Note: some useful redirection means ('< <(...)' and '<<< "$(...)"') are
@@ -59,6 +71,7 @@ sshcs_net_start() {
 sshcs_net_done() {
     # we are done with the network
     if [ -n "${net_device}" ]; then
+        dbg "Setting network device=${net_device} down"
         ip addr flush dev "${net_device}"
         ip link set dev "${net_device}" down
     fi
@@ -196,6 +209,7 @@ sshcs_cryptpart_process() {
     cryptdev_orig=${cryptdev}
     if cryptdev=$(resolve_device "${cryptdev_orig}" ${rootdelay}); then
         if cryptsetup isLuks "${cryptdev}" >/dev/null 2>&1; then
+            dbg "Adding crypt device=${cryptdev} type=${crypttype} name=${cryptname} args=<${cryptargs}> in setup script"
 
             # update script used to unlock device either in console or SSH
             [ -s "${sshcs_cryptsetup_script}" ] || cat <<EOF > "${sshcs_cryptsetup_script}"
@@ -215,7 +229,7 @@ EOF
             cat <<EOF >> "${sshcs_cryptsetup_script}"
 # loop until device is available
 while [ ! -e "/dev/mapper/${cryptname}" ]; do
-    if cryptsetup open --type "${crypttype}" "${cryptdev}" "${cryptname}" "${cryptargs}" "\${CSQUIET}"; then
+    if cryptsetup open --type "${crypttype}" "${cryptdev}" "${cryptname}" ${cryptargs} "\${CSQUIET}"; then
         if poll_device "/dev/mapper/${cryptname}" ${rootdelay}; then
             killall cryptsetup > /dev/null 2>&1
             break
@@ -250,7 +264,10 @@ run_hook() {
     sshcs_env_load
 
     # sanity check: crypttab should be present
-    [ ! -e "${etc_crypttab}" ] && return 0
+    [ ! -e "${etc_crypttab}" ] && {
+        dbg "No crypttab configuration to process"
+        return 0
+    }
 
     modprobe -a -q dm-crypt >/dev/null 2>&1
     [ "${quiet}" = "y" ] && CSQUIET=">/dev/null"

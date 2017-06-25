@@ -1,5 +1,11 @@
 2017-06-25 Julien Coloos <julien.coloos [at] gmail [dot] com>
 
+        * v0.5-1
+        Fixed cryptsetup additional arguments handling: were not properly passed
+
+
+2017-06-25 Julien Coloos <julien.coloos [at] gmail [dot] com>
+
         * v0.4-1
         Fixed TRIM option handling in /etc/crypttab: 'discard' ('allow-discards' being the switch name to use in cryptsetup)
 
