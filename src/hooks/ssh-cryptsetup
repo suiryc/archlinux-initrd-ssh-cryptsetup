@@ -179,7 +179,7 @@ sshcs_cryptpart_process() {
     cryptargs=
     for cryptopt in ${cryptoptions//,/ }; do
         case ${cryptopt} in
-            allow-discards)
+            discard)
                 cryptargs="${cryptargs} --allow-discards"
                 ;;
 

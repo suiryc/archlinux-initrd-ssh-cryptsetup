@@ -1,26 +1,32 @@
+2017-06-25 Julien Coloos <julien.coloos [at] gmail [dot] com>
+
+        * v0.4-1
+        Fixed TRIM option handling in /etc/crypttab: 'discard' ('allow-discards' being the switch name to use in cryptsetup)
+
+
 2015-11-22 Julien Coloos <julien.coloos [at] gmail [dot] com>
 
-	* v0.3-1
-	Added configurable timeout for ipconfig
+        * v0.3-1
+        Added configurable timeout for ipconfig
         Moved configuration file from /etc/dropbear/initrd.env to /etc/initcpio/sshcs_env
 
 
 2014-05-20 Julien Coloos <julien.coloos [at] gmail [dot] com>
 
-	* v0.2-1
-	Removed unnecessary dependency: psmisc
-	Added configurable timeout to unlock devices before automatic poweroff
+        * v0.2-1
+        Removed unnecessary dependency: psmisc
+        Added configurable timeout to unlock devices before automatic poweroff
 
 
 2014-05-19 Julien Coloos <julien.coloos [at] gmail [dot] com>
 
-	* v0.1-1
+        * v0.1-1
 
-	* Code adapted from dropbear_initrd_encrypt (https://aur.archlinux.org/packages/dropbear_initrd_encrypt/)
-	Reworked code
-	Dropped non-LUKS support
-	Rely on /etc/crypttab
-	Handle multiple devices to unlock
-	Merged dropbear and encryptssh hooks
-	Better resources cleanup
+        * Code adapted from dropbear_initrd_encrypt (https://aur.archlinux.org/packages/dropbear_initrd_encrypt/)
+        Reworked code
+        Dropped non-LUKS support
+        Rely on /etc/crypttab
+        Handle multiple devices to unlock
+        Merged dropbear and encryptssh hooks
+        Better resources cleanup
 

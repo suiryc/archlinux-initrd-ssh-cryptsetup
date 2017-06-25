@@ -1,6 +1,6 @@
 # Maintainer: Julien Coloos <julien.coloos [at] gmail [dot] com>
 pkgname=initrd-ssh-cryptsetup
-pkgver=0.3
+pkgver=0.4
 pkgrel=1
 pkgdesc="Allows for LUKS-encrypted devices to be unlocked remotely over SSH"
 arch=('any')
@@ -10,7 +10,7 @@ depends=('dropbear' 'cryptsetup' 'mkinitcpio-nfs-utils' 'iproute2')
 install=$pkgname.install
 changelog='ChangeLog'
 source=("http://julien.coloos.free.fr/archlinux/$pkgname-$pkgver.tar.xz" "$pkgname.install")
-md5sums=('a25dbbac5cd82a8d87932e646e38d9c4'
+md5sums=('fab9d0ffc14a6cd7bcb79fa1b9411336'
          'ac60109d80e7bb2af0d66e69aaf178a6')
 
 package() {
