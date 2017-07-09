@@ -11,6 +11,7 @@ As explained upon installation, the following things need to be done:
    * add the SSH public key to `/etc/dropbear/initrd.authorized_keys`
    * add the `ip=` kernel command parameter to the bootloader configuration (see https://wiki.archlinux.org/index.php/Mkinitcpio#Using_net)
    * in the `HOOKS` section of `/etc/mkinitcpio.conf`, add `ssh-cryptsetup` before `filesystems`; then rebuild the initramfs: `mkinitcpio -p linux`
+      - when using a non-standard keyboard layout, it is also useful to add the `keymap` hook before `ssh-cryptsetup`
 
 The LUKS-encrypted devices to unlock are derived from `/etc/crypttab`.
 
