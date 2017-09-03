@@ -1,17 +1,31 @@
-Personal ArchLinux package combining dropbear and cryptsetup in initrd for unlocking LUKS-encrypted devices either locally (boot console) or remotely over SSH.
-The code was reworked from [dropbear_initrd_encrypt](https://aur.archlinux.org/packages/dropbear_initrd_encrypt/).
+Personal ArchLinux package combining dropbear and cryptsetup in initrd for unlocking LUKS-encrypted devices either locally (boot console) or remotely over SSH.  
+The code was reworked from legacy dropbear_initrd_encrypt AUR package.
 
 
 ## Installation
-After cloning the repo, installation is done as for an AUR package.
+After cloning the repo, installation is done as for an AUR package, e.g.:
+
+    makepkg -sri
+
+
+## Dropbear
+SSH server key need to be generated for `dropbear`.  
+Either a new key can be generated with `dropbearkey`, e.g.:
+
+    dropbearkey -t ecdsa -f /etc/dropbear/dropbear_ecdsa_host_key
+Or an existing OpenSSH key can be converted with `dropbearconvert` (useful so that the server fingerprint is the same with both), e.g.:
+
+    dropbearconvert openssh dropbear /etc/ssh/ssh_host_ecdsa_key /etc/dropbear/dropbear_ecdsa_host_key
+Note: `rsa` and `dss` (`dsa` in OpenSSH) types are also handled.
 
 
 ## Configuration
 As explained upon installation, the following things need to be done:
-   * add the SSH public key to `/etc/dropbear/initrd.authorized_keys`
+   * add the authorized SSH public key to `/etc/dropbear/initrd.authorized_keys`
    * add the `ip=` kernel command parameter to the bootloader configuration (see https://wiki.archlinux.org/index.php/Mkinitcpio#Using_net)
+      - e.g. with `grub`: add `ip=:::::eth0:dhcp` to `GRUB_CMDLINE_LINUX_DEFAULT` in `/etc/default/grub`, and re-generate the configuration with `grub-mkconfig -o /boot/grub/grub.cfg`
    * in the `HOOKS` section of `/etc/mkinitcpio.conf`, add `ssh-cryptsetup` before `filesystems`; then rebuild the initramfs: `mkinitcpio -p linux`
-      - when using a non-standard keyboard layout, it is also useful to add the `keymap` hook before `ssh-cryptsetup`
+      - when using a non-standard keyboard layout, it is also useful to add the `keymap` hook before `ssh-cryptsetup`, and also move `keyboard` before `keymap`
 
 The LUKS-encrypted devices to unlock are derived from `/etc/crypttab`.
 
