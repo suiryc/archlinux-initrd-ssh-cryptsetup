@@ -163,7 +163,7 @@ EOF
     touch "/var/log/lastlog"
 
     msg "Starting dropbear ..."
-    dropbear -Emsgjk -P "${path_dropbear_pid}" ${sshcs_opt_listen}
+    dropbear -Esgjk -P "${path_dropbear_pid}" ${sshcs_opt_listen}
 
     # Actual unlocking
     sshcs_unlock

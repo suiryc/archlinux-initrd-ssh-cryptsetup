@@ -1,3 +1,8 @@
+2018-03-13 Julien Coloos <julien.coloos [at] gmail [dot] com>
+
+        * v0.6-1
+        Dropped '-m' option when calling dropbear (latest ArchLinux version does not handle it)
+
 2017-06-25 Julien Coloos <julien.coloos [at] gmail [dot] com>
 
         * v0.5-1
