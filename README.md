@@ -54,7 +54,8 @@ For example:
 2. If `src` was modified
    * archive the `src` folder in `$pkgname-$pkgver.tar.xz` file; e.g.: `tar -cJf initrd-ssh-cryptsetup-0.4.tar.xz src`
    * upload the archive on the online repository (pointed by `PKGBUILD`)
-3. Update `PKGBUILD`
+3. Update ChangeLog
+4. Update `PKGBUILD`
    * bump `pkgver` if `src` was modified, or `pkgrel` if building files were modified
    * refresh `md5sums` if necessary (based on `md5sum initrd-ssh-cryptsetup-*.tar.xz initrd-ssh-cryptsetup.install` output)
-4. Delete generated archive file if any
+5. Delete generated archive file if any
