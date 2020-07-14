@@ -16,7 +16,9 @@ Either a new key can be generated with `dropbearkey`, e.g.:
 Or an existing OpenSSH key can be converted with `dropbearconvert` (useful so that the server fingerprint is the same with both), e.g.:
 
     dropbearconvert openssh dropbear /etc/ssh/ssh_host_ecdsa_key /etc/dropbear/dropbear_ecdsa_host_key
-Note: `rsa` and `dss` (`dsa` in OpenSSH) types are also handled.
+Notes:
+   * `rsa` and `ed25519` types are also handled
+   * OpenSSH keys must be in `PEM` format for `dropbearconvert` to properly work
 
 
 ## Configuration
@@ -52,7 +54,7 @@ For example:
 ## Building notes
 1. Modify the sources (features in `src`, and/or package building files)
 2. If `src` was modified
-   * archive the `src` folder in `$pkgname-$pkgver.tar.xz` file; e.g.: `tar -cJf initrd-ssh-cryptsetup-0.4.tar.xz src`
+   * archive the `src` folder in `$pkgname-$pkgver.tar.xz` file; e.g.: `tar -cJf initrd-ssh-cryptsetup-0.7.tar.xz src`
    * upload the archive on the online repository (pointed by `PKGBUILD`)
 3. Update ChangeLog
 4. Update `PKGBUILD`

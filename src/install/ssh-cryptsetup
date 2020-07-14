@@ -32,7 +32,7 @@ build() {
     local etc_crypttab="/etc/crypttab"
     local dropbear_authorized_keys="/etc/dropbear/initrd.authorized_keys"
     local sshcs_env="/etc/initcpio/sshcs_env"
-    local dropbear_key_types=( "dss" "rsa" "ecdsa" )
+    local dropbear_key_types=( "rsa" "ecdsa" "ed25519" )
     local dropbear_keyfile_prefix="/etc/dropbear/dropbear_"
     local dropbear_keyfile_suffix="_host_key"
     local openssh_keyfile_prefix="/etc/ssh/ssh_host_"
@@ -79,9 +79,9 @@ build() {
 
     # SSH-related files
     add_file "${dropbear_authorized_keys}" "/root/.ssh/authorized_keys"
-    add_file "/etc/dropbear/dropbear_rsa_host_key"
-    add_file "/etc/dropbear/dropbear_dss_host_key"
-    add_file "/etc/dropbear/dropbear_ecdsa_host_key"
+    for keytype in "${dropbear_key_types[@]}"; do
+        add_file "${dropbear_keyfile_prefix}${keytype}${dropbear_keyfile_suffix}"
+    done
 
     # cryptsetup-related files
     add_file "${etc_crypttab}"
@@ -113,8 +113,8 @@ initrd shell):
    - default (and minimum value): 2 minutes
    - negative value to deactivate
 
-Each SSH server key ('dropbear_rsa_host_key', 'dropbear_dss_host_key' and
-'dropbear_ecdsa_host_key' in '/etc/dropbear' folder) is imported from OpenSSH
+Each SSH server key ('dropbear_rsa_host_key', 'dropbear_ecdsa_host_key' and
+'dropbear_ed25519_host_key' in '/etc/dropbear' folder) is imported from OpenSSH
 if present or generated if missing. Fingerprints are displayed upon building
 the initramfs image.
 EOF
