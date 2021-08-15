@@ -1,3 +1,9 @@
+2021-08-15 Julien Coloos <julien.coloos [at] gmail [dot] com>
+
+        * v0.8-1
+        Include 'libgcc_s.so.1' which is necessary for (at least) proper LUKS v2 handling
+
+
 2020-07-14 Julien Coloos <julien.coloos [at] gmail [dot] com>
 
         * v0.7-1

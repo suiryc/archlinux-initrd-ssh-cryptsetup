@@ -53,6 +53,9 @@ build() {
     sshcs_check_keys
 
     add_checked_modules "/drivers/net/"
+    # Note: parts of this script (modules/binaries added) are the same than the
+    # 'encrypt' install script (/usr/lib/initcpio/install/encrypt) which is the
+    # nominal one to deal with encrypted volumes at boot time.
     add_module dm-crypt
     # Note: crypto modules are necessary
     if [ -n "${CRYPTO_MODULES}" ]; then
@@ -90,6 +93,11 @@ build() {
     add_file "/usr/lib/udev/rules.d/95-dm-notify.rules"
     add_file "/usr/lib/initcpio/udev/11-dm-initramfs.rules" "/usr/lib/udev/rules.d/11-dm-initramfs.rules"
 
+    # At least with LUKS v2 volumes, cryptsetup calls pthread_cancel(), which
+    # dlopen()s libgcc_s.so.1.
+    # See the nominal 'encrypt' module, and similar/related bug reports (e.g.
+    # https://bugs.debian.org/cgi-bin/bugreport.cgi?bug=950254).
+    add_binary "/usr/lib/libgcc_s.so.1"
 
     add_runscript
 }
