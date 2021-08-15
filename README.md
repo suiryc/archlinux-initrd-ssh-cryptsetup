@@ -20,6 +20,10 @@ Notes:
    * `rsa` and `ed25519` types are also handled
    * OpenSSH keys must be in `PEM` format for `dropbearconvert` to properly work
 
+If necessary an existing key file can be converted to `PEM` format using `ssh-keygen`:
+
+    ssh-keygen -A -p -m PEM -f /etc/ssh/ssh_host_ecdsa_key
+
 
 ## Configuration
 As explained upon installation, the following things need to be done:
