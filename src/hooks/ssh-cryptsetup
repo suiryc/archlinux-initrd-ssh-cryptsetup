@@ -40,9 +40,12 @@ sshcs_net_start() {
 
     echo ""
     echo "Configuring IP (timeout = ${sshcs_opt_timeout_ipconfig}s) ..."
+    # ipconfig manual: https://git.kernel.org/pub/scm/libs/klibc/klibc.git/tree/usr/kinit/ipconfig/README.ipconfig
     ipconfig_out=$(ipconfig -t "${sshcs_opt_timeout_ipconfig}" "ip=${ip}")
     if [ $? -ne 0 ]; then
         err "IP configuration timeout!"
+        echo "Devices probing:"
+        ipconfig -n -t 5 -c none all
         return 1
     fi
 

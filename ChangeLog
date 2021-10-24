@@ -1,3 +1,9 @@
+2021-10-24 Julien Coloos <julien.coloos [at] gmail [dot] com>
+
+        * v0.9-1
+        Try to print network devices information when interface setup fails
+
+
 2021-08-15 Julien Coloos <julien.coloos [at] gmail [dot] com>
 
         * v0.8-1

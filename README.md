@@ -30,6 +30,7 @@ As explained upon installation, the following things need to be done:
    * add the authorized SSH public key to `/etc/dropbear/initrd.authorized_keys`
    * add the `ip=` kernel command parameter to the bootloader configuration (see https://wiki.archlinux.org/index.php/Mkinitcpio#Using_net)
       - e.g. with `grub`: add `ip=:::::eth0:dhcp` to `GRUB_CMDLINE_LINUX_DEFAULT` in `/etc/default/grub`, and re-generate the configuration with `grub-mkconfig -o /boot/grub/grub.cfg`
+      - also see https://git.kernel.org/pub/scm/libs/klibc/klibc.git/tree/usr/kinit/ipconfig/README.ipconfig
    * in the `HOOKS` section of `/etc/mkinitcpio.conf`, add `ssh-cryptsetup` before `filesystems`; then rebuild the initramfs: `mkinitcpio -p linux`
       - when using a non-standard keyboard layout, it is also useful to add the `keymap` hook before `ssh-cryptsetup`, and also move `keyboard` before `keymap`
 
@@ -58,7 +59,7 @@ For example:
 ## Building notes
 1. Modify the sources (features in `src`, and/or package building files)
 2. If `src` was modified
-   * archive the `src` folder in `$pkgname-$pkgver.tar.xz` file; e.g.: `tar -cJf initrd-ssh-cryptsetup-0.7.tar.xz src`
+   * archive the `src` folder in `$pkgname-$pkgver.tar.xz` file; e.g.: `tar -cJf initrd-ssh-cryptsetup-0.9.tar.xz src`
    * upload the archive on the online repository (pointed by `PKGBUILD`)
 3. Update ChangeLog
 4. Update `PKGBUILD`
