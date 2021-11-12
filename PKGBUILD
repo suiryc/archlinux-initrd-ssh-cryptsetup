@@ -1,17 +1,17 @@
 # Maintainer: Julien Coloos <julien.coloos [at] gmail [dot] com>
 pkgname=initrd-ssh-cryptsetup
-pkgver=0.9
+pkgver=0.10
 pkgrel=1
 pkgdesc="Allows for LUKS-encrypted devices to be unlocked remotely over SSH"
 arch=('any')
 url="https://github.com/suiryc/archlinux-$pkgname"
 license=('GPL3')
-depends=('dropbear' 'cryptsetup' 'mkinitcpio-nfs-utils' 'iproute2')
+depends=('dropbear' 'cryptsetup' 'mkinitcpio-nfs-utils' 'iproute2' 'ethtool')
 install=$pkgname.install
 changelog='ChangeLog'
 source=("http://julien.coloos.free.fr/archlinux/$pkgname-$pkgver.tar.xz" "$pkgname.install")
-md5sums=('c94a905ca91f7afe2c0f771bd5182cb2'
-         'ac60109d80e7bb2af0d66e69aaf178a6')
+sha256sums=('c3fa91fc8ba2228b3492d3709231918c8015cc3da49f516c3eacea5c0217536c'
+            'b84978b3c2ef32208c2b104ee2d3ce8aaec26da0bd4e9e1c83942f373bbf6285')
 
 package() {
   install -Dm644 "$srcdir/src/install/ssh-cryptsetup" "$pkgdir/usr/lib/initcpio/install/ssh-cryptsetup"

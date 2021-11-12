@@ -1,109 +1,110 @@
 #!/bin/bash
 
 sshcs_check_nonempty() {
-    local filepath="$1"
+  local filepath="$1"
 
-    [ -e "${filepath}" ] && grep -q -v '^\s*\(#\|$\)' "${filepath}"
+  [ -e "${filepath}" ] && grep -q -v '^\s*\(#\|$\)' "${filepath}"
 }
 
 sshcs_check_keys() {
-    local dropbear_keyfile
-    local openssh_keyfile
-    local fingerprint
+  local dropbear_keyfile
+  local openssh_keyfile
+  local fingerprint
 
-    for keytype in "${dropbear_key_types[@]}"; do
-        dropbear_keyfile=${dropbear_keyfile_prefix}${keytype}${dropbear_keyfile_suffix}
-        openssh_keyfile=${openssh_keyfile_prefix}${keytype}${openssh_keyfile_suffix}
+  for keytype in "${dropbear_key_types[@]}"; do
+    dropbear_keyfile=${dropbear_keyfile_prefix}${keytype}${dropbear_keyfile_suffix}
+    openssh_keyfile=${openssh_keyfile_prefix}${keytype}${openssh_keyfile_suffix}
 
-        # Prefer OpenSSH keys, or generate missing ones
-        if [ -e "${openssh_keyfile}" ]; then
-            #echo "Copying OpenSSH ${keytype} host key for dropbear ..."
-            dropbearconvert openssh dropbear "${openssh_keyfile}" "${dropbear_keyfile}" > /dev/null 2>&1
-        elif [ ! -e "${dropbear_keyfile}" ]; then
-            #echo "Generating ${keytype} host key for dropbear ..."
-            dropbearkey -t "${keytype}" -f "${dropbear_keyfile}" > /dev/null 2>&1
-        fi
-        fingerprint=$(dropbearkey -y -f "${dropbear_keyfile}" | sed -n '/^Fingerprint:/ {s/Fingerprint: *//; p}')
-        echo "$(basename "${dropbear_keyfile}") : ${fingerprint}"
-    done
+    # Prefer OpenSSH keys, or generate missing ones
+    if [ -e "${openssh_keyfile}" ]; then
+      #echo "Copying OpenSSH ${keytype} host key for dropbear ..."
+      dropbearconvert openssh dropbear "${openssh_keyfile}" "${dropbear_keyfile}" > /dev/null 2>&1
+    elif [ ! -e "${dropbear_keyfile}" ]; then
+      #echo "Generating ${keytype} host key for dropbear ..."
+      dropbearkey -t "${keytype}" -f "${dropbear_keyfile}" > /dev/null 2>&1
+    fi
+    fingerprint=$(dropbearkey -y -f "${dropbear_keyfile}" | sed -n '/^Fingerprint:/ {s/Fingerprint: *//; p}')
+    echo "$(basename "${dropbear_keyfile}") : ${fingerprint}"
+  done
 }
 
 build() {
-    local etc_crypttab="/etc/crypttab"
-    local dropbear_authorized_keys="/etc/dropbear/initrd.authorized_keys"
-    local sshcs_env="/etc/initcpio/sshcs_env"
-    local dropbear_key_types=( "rsa" "ecdsa" "ed25519" )
-    local dropbear_keyfile_prefix="/etc/dropbear/dropbear_"
-    local dropbear_keyfile_suffix="_host_key"
-    local openssh_keyfile_prefix="/etc/ssh/ssh_host_"
-    local openssh_keyfile_suffix="_key"
+  local etc_crypttab="/etc/crypttab"
+  local dropbear_authorized_keys="/etc/dropbear/initrd.authorized_keys"
+  local sshcs_env="/etc/initcpio/sshcs_env"
+  local dropbear_key_types=( "rsa" "ecdsa" "ed25519" )
+  local dropbear_keyfile_prefix="/etc/dropbear/dropbear_"
+  local dropbear_keyfile_suffix="_host_key"
+  local openssh_keyfile_prefix="/etc/ssh/ssh_host_"
+  local openssh_keyfile_suffix="_key"
 
-    # Check we are needed
-    if ! sshcs_check_nonempty "${dropbear_authorized_keys}"; then
-        echo "There is no root key(s) in ${dropbear_authorized_keys}. Skipping."
-        return 0
-    fi
-    if ! sshcs_check_nonempty "${etc_crypttab}"; then
-        echo "There is no device in ${etc_crypttab}. Skipping."
-        return 0
-    fi
+  # Check we are needed
+  if ! sshcs_check_nonempty "${dropbear_authorized_keys}"; then
+    echo "There is no root key(s) in ${dropbear_authorized_keys}. Skipping."
+    return 0
+  fi
+  if ! sshcs_check_nonempty "${etc_crypttab}"; then
+    echo "There is no device in ${etc_crypttab}. Skipping."
+    return 0
+  fi
 
-    umask 0022
+  umask 0022
 
-    sshcs_check_keys
+  sshcs_check_keys
 
-    add_checked_modules "/drivers/net/"
-    # Note: parts of this script (modules/binaries added) are the same than the
-    # 'encrypt' install script (/usr/lib/initcpio/install/encrypt) which is the
-    # nominal one to deal with encrypted volumes at boot time.
-    add_module dm-crypt
-    # Note: crypto modules are necessary
-    if [ -n "${CRYPTO_MODULES}" ]; then
-        local mod
-        for mod in ${CRYPTO_MODULES}; do
-            add_module "${mod}"
-        done
-    else
-        add_all_modules "/crypto/"
-    fi
-
-    # Note: dmsetup is necessary for device mapper features
-    add_binary "cryptsetup"
-    add_binary "dmsetup"
-    add_binary "dropbear"
-    add_binary "ip"
-    add_binary "/usr/lib/initcpio/ipconfig" "/sbin/ipconfig"
-
-    # Our hook files
-    [ -e "${sshcs_env}" ] && add_file "${sshcs_env}"
-
-    # auth-related files
-    add_file "/lib/libnss_files.so"
-
-    # SSH-related files
-    add_file "${dropbear_authorized_keys}" "/root/.ssh/authorized_keys"
-    for keytype in "${dropbear_key_types[@]}"; do
-        add_file "${dropbear_keyfile_prefix}${keytype}${dropbear_keyfile_suffix}"
+  add_checked_modules "/drivers/net/"
+  # Note: parts of this script (modules/binaries added) are the same than the
+  # 'encrypt' install script (/usr/lib/initcpio/install/encrypt) which is the
+  # nominal one to deal with encrypted volumes at boot time.
+  add_module dm-crypt
+  # Note: crypto modules are necessary
+  if [ -n "${CRYPTO_MODULES}" ]; then
+    local mod
+    for mod in ${CRYPTO_MODULES}; do
+      add_module "${mod}"
     done
+  else
+    add_all_modules "/crypto/"
+  fi
 
-    # cryptsetup-related files
-    add_file "${etc_crypttab}"
-    add_file "/usr/lib/udev/rules.d/10-dm.rules"
-    add_file "/usr/lib/udev/rules.d/13-dm-disk.rules"
-    add_file "/usr/lib/udev/rules.d/95-dm-notify.rules"
-    add_file "/usr/lib/initcpio/udev/11-dm-initramfs.rules" "/usr/lib/udev/rules.d/11-dm-initramfs.rules"
+  # Note: dmsetup is necessary for device mapper features
+  add_binary "cryptsetup"
+  add_binary "dmsetup"
+  add_binary "dropbear"
+  add_binary "ip"
+  add_binary "/usr/lib/initcpio/ipconfig" "/bin/ipconfig"
+  add_binary "ethtool"
 
-    # At least with LUKS v2 volumes, cryptsetup calls pthread_cancel(), which
-    # dlopen()s libgcc_s.so.1.
-    # See the nominal 'encrypt' module, and similar/related bug reports (e.g.
-    # https://bugs.debian.org/cgi-bin/bugreport.cgi?bug=950254).
-    add_binary "/usr/lib/libgcc_s.so.1"
+  # Our hook files
+  [ -e "${sshcs_env}" ] && add_file "${sshcs_env}"
 
-    add_runscript
+  # auth-related files
+  add_file "/lib/libnss_files.so"
+
+  # SSH-related files
+  add_file "${dropbear_authorized_keys}" "/root/.ssh/authorized_keys"
+  for keytype in "${dropbear_key_types[@]}"; do
+    add_file "${dropbear_keyfile_prefix}${keytype}${dropbear_keyfile_suffix}"
+  done
+
+  # cryptsetup-related files
+  add_file "${etc_crypttab}"
+  add_file "/usr/lib/udev/rules.d/10-dm.rules"
+  add_file "/usr/lib/udev/rules.d/13-dm-disk.rules"
+  add_file "/usr/lib/udev/rules.d/95-dm-notify.rules"
+  add_file "/usr/lib/initcpio/udev/11-dm-initramfs.rules" "/usr/lib/udev/rules.d/11-dm-initramfs.rules"
+
+  # At least with LUKS v2 volumes, cryptsetup calls pthread_cancel(), which
+  # dlopen()s libgcc_s.so.1.
+  # See the nominal 'encrypt' module, and similar/related bug reports (e.g.
+  # https://bugs.debian.org/cgi-bin/bugreport.cgi?bug=950254).
+  add_binary "/usr/lib/libgcc_s.so.1"
+
+  add_runscript
 }
 
 help() {
-    cat <<EOF
+  cat <<EOF
 This hook allows for LUKS encrypted devices to be unlocked either locally
 (boot console) or remotely over SSH.
 
@@ -127,3 +128,4 @@ if present or generated if missing. Fingerprints are displayed upon building
 the initramfs image.
 EOF
 }
+
