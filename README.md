@@ -64,5 +64,6 @@ For example:
 3. Update ChangeLog
 4. Update `PKGBUILD`
    * bump `pkgver` if `src` was modified, or `pkgrel` if building files were modified
-   * refresh `md5sums` if necessary (based on `md5sum initrd-ssh-cryptsetup-*.tar.xz initrd-ssh-cryptsetup.install` output)
+   * refresh `sha256sums` with `updpkgsums` if necessary
+     - or manually, based on `sha256sum initrd-ssh-cryptsetup-*.tar.xz initrd-ssh-cryptsetup.install` output
 5. Delete generated archive file if any
