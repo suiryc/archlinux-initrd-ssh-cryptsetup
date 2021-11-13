@@ -1,0 +1,188 @@
+#!/usr/bin/ash
+
+. "/init_functions"
+
+dbg () {
+  [ ${sshcs_opt_debug} != 0 ] && echo "$@"
+}
+
+sshcs_env_load() {
+  local sshcs_env="/etc/initcpio/sshcs_env"
+
+  local debug_default=0
+  local net_wol_default=g
+  local timeout_ipconfig_default=10
+  local timeout_poweroff_min=120
+  local use_shell_default=0
+
+  [ ${sshcs_env_loaded:-0} -eq 1 ] && return
+  [ -e "${sshcs_env}" ] && . "${sshcs_env}"
+  sshcs_env_loaded=1
+  [ -z "${sshcs_opt_debug}" ] && sshcs_opt_debug=${debug_default}
+  [ -z "${sshcs_opt_net_wol}" ] && sshcs_opt_net_wol=${net_wol_default}
+  [ -z "${sshcs_opt_timeout_ipconfig}" ] && sshcs_opt_timeout_ipconfig=${timeout_ipconfig_default}
+  [ -n "${sshcs_opt_listen}" ] && sshcs_opt_listen="-p ${sshcs_opt_listen}"
+  [ -z "${sshcs_opt_timeout_poweroff}" ] && sshcs_opt_timeout_poweroff=${timeout_poweroff_min}
+  [ -z "${sshcs_opt_use_shell}" ] && sshcs_opt_use_shell=${use_shell_default}
+  [ ${sshcs_opt_timeout_poweroff} -ge 0 ] && [ ${sshcs_opt_timeout_poweroff} -lt ${timeout_poweroff_min} ] && sshcs_opt_timeout_poweroff=${timeout_poweroff_min}
+
+  sshcs_cryptsetup_script="/.sshcs_cryptsetup_script.sh"
+}
+
+proc_parse_stat() {
+  local unused
+
+  pid=$1
+  cmd=
+  ppid=
+  [ ! -e /proc/${pid}/stat ] && return 1
+  read unused cmd unused ppid unused < /proc/${pid}/stat
+}
+
+proc_find_parent_cmd() {
+  pid=$1
+  proc_parse_stat ${pid} || return 1
+  while [ ${ppid} -gt 1 ]
+  do
+    proc_parse_stat ${ppid} || return 1
+    if [ "${cmd}" == "($2)" ]; then
+      ppid=${pid}
+      pid=$1
+      return 0
+    fi
+    pid=${ppid}
+  done
+
+  return 1
+}
+
+proc_is_console() {
+  if [ -z "${is_console:-}" ]; then
+    # We are in console if we were not forked from dropbear.
+    is_console=1
+    proc_find_parent_cmd $$ "dropbear" && is_console=0
+  fi
+
+  [ "${is_console}" -eq 1 ]
+}
+
+sshcs_cleanup() {
+  local pgrep_output
+
+  # Reminders:
+  # We are called when devices have been unlocked.
+  #
+  # We are only called as part of the main shell (whether on console - the init
+  # script - or through SSH - as the user login shell), and once we return our
+  # parent shell will end.
+  #
+  # The unlocking script does 'killall cryptsetup' after each successful unlock,
+  # which is used to wakeup any other running unlocking script.
+  # Thus as long as all devices have been unlocked, we don't expect any script
+  # to be stuck on 'cryptsetup' calls.
+
+  if proc_is_console; then
+    # We are in the console.
+    # It is time to properly end the processes we started and files we created.
+    # When using a shell - instead of directly calling the unlocking script -
+    # we also need to signal any SSH shell so that it is properly cleaned too.
+
+    # cleanup dropbear
+    if [ -f "${path_dropbear_pid}" ]; then
+      msg "Stopping dropbear ..."
+      kill $(cat "${path_dropbear_pid}")
+      rm -f "${path_dropbear_pid}"
+    fi
+
+    if [ ${sshcs_opt_use_shell} -eq 1 ]; then
+      # Find and kill all shells spawned by SSH.
+      # This is necessary to properly terminate both these shells and the spawned
+      # SSH processes.
+      # Reminder: "... | ..." does fork a subshell
+      dbg "Searching SSH shells ..."
+      pgrep_output=$(pgrep /usr/bin/ash)
+      pgrep_output=$(echo "${pgrep_output}" | grep -E -v "^(|1|$$)$")
+      echo "${pgrep_output}" | while read pid; do
+        proc_parse_stat ${pid} || continue
+        proc_find_parent_cmd ${pid} "dropbear" || continue
+        dbg "Killing SSH shell pid=${pid}"
+        kill -SIGHUP ${pid}
+      done
+    fi
+
+    # cleanup /dev/pts if necessary
+    if [ ${dev_pts_mounted} -ne 0 ]; then
+      umount "/dev/pts"
+      rm -R "/dev/pts"
+    fi
+
+    # stop the network before going on in boot sequence
+    sshcs_net_done
+
+    rm -f "${sshcs_cryptsetup_script}" "${sshcs_shell_script}" "/etc/passwd" "/etc/shells" "/var/log/lastlog"
+  elif [ ${sshcs_opt_use_shell} -eq 1 ]; then
+    # We are in a SSH shell session.
+
+    # Find and kill console shell.
+    # This is necessary so that our script launched from the init process can
+    # finally check that devices have been properly unlocked, properly end and
+    # let the init process end booting.
+    # Note: as a side effect, this will also kill the shell that was forked to
+    # trigger a timeout, which is fine (we want to kill it, either from here or
+    # from the init shell).
+    dbg "Searching console shells ..."
+    pgrep_output=$(pgrep /usr/bin/ash)
+    pgrep_output=$(echo "${pgrep_output}" | grep -E -v "^(|1|$$)$")
+    echo "${pgrep_output}" | while read pid; do
+      proc_find_parent_cmd ${pid} "dropbear" && continue
+      dbg "Killing console shell pid=${pid}"
+      kill -SIGHUP ${pid}
+    done
+  fi
+  # else: when in SSH shell script, we have nothing else to do other than exit.
+}
+
+sshcs_check_done() {
+  # Whether we are called from the main script: that is whether the shell will
+  # end when we return.
+  local finalize=$1
+
+  # This is always the main script when not using shell
+  [ ${sshcs_opt_use_shell} -eq 0 ] && finalize=1
+
+  # Reset timeout when applicable: only possible from init script.
+  proc_is_console && type sshcs_untrap_timeout > /dev/null 2>&1 && sshcs_untrap_timeout
+
+  # Check devices are unlocked.
+  sshcs_unlocked_test=1
+  sshcs_unlocked=1
+  . "${sshcs_cryptsetup_script}"
+  if [ ${sshcs_unlocked} -ne 1 ]; then
+    echo ""
+    # When finalizing in console, power off
+    if [ ${finalize} -eq 1 ] &&  proc_is_console; then
+      err "Devices are still locked! Powering off."
+      poweroff -f
+    fi
+
+    # When in shell or SSH, let user try again
+    err "Devices are still locked! Please retry."
+    return
+  fi
+
+  if [ ${finalize} -eq 0 ]; then
+    # Kill our parent (the interactive shell); the script that launched it will
+    # do finalization.
+    proc_parse_stat $$
+    kill -SIGHUP ${ppid}
+    exit 0
+  fi
+
+  echo ""
+  echo "cryptsetup succeeded! Boot sequence should go on."
+  proc_is_console || echo "Please wait and reconnect to nominal SSH service."
+
+  sshcs_cleanup
+}
+
+sshcs_env_load

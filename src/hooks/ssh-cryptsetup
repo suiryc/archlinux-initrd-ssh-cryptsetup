@@ -1,311 +1,324 @@
 #!/usr/bin/ash
 
-dbg () {
-    [ ${sshcs_opt_debug} != 0 ] && echo "$@"
-}
-
-sshcs_env_load() {
-    local debug_default=0
-    local timeout_ipconfig_default=10
-    local timeout_poweroff_min=120
-
-    [ -e "${sshcs_env}" ] && . "${sshcs_env}"
-    [ -z "${sshcs_opt_debug}" ] && sshcs_opt_debug=${debug_default}
-    [ -z "${sshcs_opt_timeout_ipconfig}" ] && sshcs_opt_timeout_ipconfig=${timeout_ipconfig_default}
-    [ -n "${sshcs_opt_listen}" ] && sshcs_opt_listen="-p ${sshcs_opt_listen}"
-    [ -z "${sshcs_opt_timeout_poweroff}" ] && sshcs_opt_timeout_poweroff=${timeout_poweroff_min}
-    [ ${sshcs_opt_timeout_poweroff} -ge 0 ] && [ ${sshcs_opt_timeout_poweroff} -lt ${timeout_poweroff_min} ] && sshcs_opt_timeout_poweroff=${timeout_poweroff_min}
-}
+. "/usr/local/bin/ssh-cryptsetup-tools"
 
 sshcs_net_start() {
-    # we must have an 'ip' setting, and a device in it
-    [ -z "${ip}" ] && [ -n "${nfsaddrs}" ] && ip="${nfsaddrs}"
-    [ -z "${ip}" ] && {
-        dbg "No ip setting to setup network"
-        return 1
-    }
+  local iparg net_address ipconfig_out net_netmask net_gateway net_dns0 net_dns1
 
-    net_device=$(echo ${ip} | cut -d: -f6)
-    [ -z "${net_device}" ] && {
-        dbg "No network device to setup"
-        return 1
-    }
+  # we must have an 'ip' setting, and a device in it
+  [ -z "${ip}" ] && [ -n "${nfsaddrs}" ] && ip="${nfsaddrs}"
+  [ -z "${ip}" ] && {
+    dbg "No ip setting to setup network"
+    return 1
+  }
 
-    # Setup network and save some values
-    # Note: some useful redirection means ('< <(...)' and '<<< "$(...)"') are
-    # not supported in the available shell. So we have to write code in a
-    # temporary file and 'source' it since '... | while read ...' spawns a
-    # subshell from which outer variables cannot be altered.
-    : > "${net_env}"
+  net_device=$(echo ${ip} | cut -d: -f6)
+  [ -z "${net_device}" ] && {
+    dbg "No network device to setup"
+    return 1
+  }
 
-    echo ""
-    echo "Configuring IP (timeout = ${sshcs_opt_timeout_ipconfig}s) ..."
-    # ipconfig manual: https://git.kernel.org/pub/scm/libs/klibc/klibc.git/tree/usr/kinit/ipconfig/README.ipconfig
-    ipconfig_out=$(ipconfig -t "${sshcs_opt_timeout_ipconfig}" "ip=${ip}")
-    if [ $? -ne 0 ]; then
-        err "IP configuration timeout!"
-        echo "Devices probing:"
-        ipconfig -n -t 5 -c none all
-        return 1
-    fi
+  if [ "${sshcs_opt_net_wol:-d}" != "d" ]; then
+    dbg "Setting network device=${net_device} wol=${sshcs_opt_net_wol}"
+    ethtool -s "${net_device}" wol "${sshcs_opt_net_wol}"
+  fi
 
-    echo -n "${ipconfig_out}" | while read line; do
-        [ "${line#"IP-Config:"}" != "${line}" ] && continue
+  # Setup network and save some values
+  # Note: some useful redirection means ('< <(...)' and '<<< "$(...)"') are
+  # not supported in the available shell. So we have to write code in a
+  # temporary file and 'source' it since '... | while read ...' spawns a
+  # subshell from which outer variables cannot be altered.
+  : > "${net_env}"
 
-        line="$(echo "${line}" | sed -e 's/ :/:/g;s/: /=/g')"
+  echo ""
+  echo "Configuring IP (timeout = ${sshcs_opt_timeout_ipconfig}s) ..."
+  # ipconfig manual: https://git.kernel.org/pub/scm/libs/klibc/klibc.git/tree/usr/kinit/ipconfig/README.ipconfig
+  ipconfig_out=$(ipconfig -t "${sshcs_opt_timeout_ipconfig}" "ip=${ip}")
+  if [ $? -ne 0 ]; then
+    err "IP configuration timeout!"
+    echo "Devices probing:"
+    ipconfig -n -t 5 -c none all
+    return 1
+  fi
 
-        for iparg in ${line}; do
-            case "${iparg}" in
-                address=*|netmask=*|gateway=*|dns0=*|dns1=*)
-                    echo "net_${iparg}" >> "${net_env}"
-                    ;;
-            esac
-        done
+  echo -n "${ipconfig_out}" | while read line; do
+    [ "${line#"IP-Config:"}" != "${line}" ] && continue
+
+    line="$(echo "${line}" | sed -e 's/ :/:/g;s/: /=/g')"
+
+    for iparg in ${line}; do
+      case "${iparg}" in
+        address=*|netmask=*|gateway=*|dns0=*|dns1=*)
+          echo "net_${iparg}" >> "${net_env}"
+          ;;
+      esac
     done
+  done
 
-    . "${net_env}"
-    rm -f "${net_env}"
+  . "${net_env}"
+  rm -f "${net_env}"
 
-    echo "IP-Config: device=${net_device} ip=${net_address}/${net_netmask} gw=${net_gateway} dns0=${net_dns0} dns1=${net_dns1}"
+  echo "IP-Config: device=${net_device} ip=${net_address}/${net_netmask} gw=${net_gateway} dns0=${net_dns0} dns1=${net_dns1}"
 
-    [ -n "${net_address}" ]
+  [ -n "${net_address}" ]
 }
 
 sshcs_net_done() {
-    # we are done with the network
-    if [ -n "${net_device}" ]; then
-        dbg "Setting network device=${net_device} down"
-        ip addr flush dev "${net_device}"
-        ip link set dev "${net_device}" down
-    fi
+  # we are done with the network
+  if [ -n "${net_device}" ]; then
+    dbg "Setting network device=${net_device} down"
+    ip addr flush dev "${net_device}"
+    ip link set dev "${net_device}" down
+  fi
 }
 
 sshcs_trapped_timeout() {
-    err "Timeout reached! Powering off."
-    poweroff -f
-    exit
+  err "Timeout reached! Powering off."
+  poweroff -f
+  exit
 }
 
 sshcs_trap_timeout() {
-    local pid_init=$$
+  local pid_init=$$
 
-    if [ ${sshcs_opt_timeout_poweroff} -gt 0 ]; then
-        echo ""
-        echo "WARNING! Automatic poweroff will be triggered in ${sshcs_opt_timeout_poweroff}s"
-        echo "To deactivate, please unlock devices"
-        echo ""
-        trap sshcs_trapped_timeout SIGALRM
-        (
-            sleep ${sshcs_opt_timeout_poweroff}
-            kill -SIGALRM ${pid_init}
-            # Signal is not processed if cryptsetup is waiting for the password
-            killall cryptsetup > /dev/null 2>&1
-        ) &
-        pid_timeout=$!
-    fi
+  if [ ${sshcs_opt_timeout_poweroff} -gt 0 ]; then
+    echo ""
+    echo "WARNING! Automatic poweroff will be triggered in ${sshcs_opt_timeout_poweroff}s"
+    echo "To deactivate, please unlock devices"
+    trap sshcs_trapped_timeout SIGALRM
+    (
+      sleep ${sshcs_opt_timeout_poweroff}
+      kill -SIGALRM ${pid_init}
+      # Signal is not processed if cryptsetup is waiting for the password
+      killall cryptsetup > /dev/null 2>&1
+    ) &
+    pid_timeout=$!
+  fi
 }
 
 sshcs_untrap_timeout() {
-    [ -z "${pid_timeout}" ] && return 0
-    kill ${pid_timeout}
-    trap - SIGALRM
-    msg "Timeout cleared."
+  [ -z "${pid_timeout}" ] && return 0
+  # Notes:
+  # If there was a running SSH shell, it may also try to kill it.
+  # This only kills the spawned subshell, leaving the 'sleep' command still
+  # running until done (which is not an issue).
+  proc_parse_stat ${pid_timeout} && kill ${pid_timeout}
+  pid_timeout=
+  trap - SIGALRM
+  msg "Timeout cleared."
 }
 
-sshcs_unlock() {
-    sshcs_trap_timeout
+sshcs_shell_run() {
+  sshcs_trap_timeout
 
-    # actual script (shared with SSH login) unlocking encrypted devices
-    . "${sshcs_cryptsetup_script}"
-
-    sshcs_untrap_timeout
+  # actual script (shared with SSH login) with which we can unlock devices
+  sshcs_unlocked_test=0
+  . "${sshcs_shell_script}"
 }
 
-sshcs_dropbear_unlock() {
-    local pid_timeout=
-    local dev_pts_mounted=0
-    local listen=
+sshcs_dropbear_run() {
+  local pid_timeout=
+  local dev_pts_mounted=0
+  local listen=
 
-    # ensure /dev/pts is present
-    if [ ! -d "/dev/pts" ]; then
-        mkdir -p "/dev/pts"
-        mount -t devpts devpts "/dev/pts"
-        dev_pts_mounted=1
-    fi
+  # ensure /dev/pts is present
+  if [ ! -d "/dev/pts" ]; then
+    mkdir -p "/dev/pts"
+    mount -t devpts devpts "/dev/pts"
+    dev_pts_mounted=1
+  fi
 
-    # /etc/passwd file for the root user
-    echo "root:x:0:0:root:/root:${dropbear_login_shell}" > "/etc/passwd"
-    echo "${dropbear_login_shell}" > "/etc/shells"
-
-    # root login script
-    cat <<EOF > "${dropbear_login_shell}"
+  if [ ${sshcs_opt_use_shell} -eq 0 ]; then
+    sshcs_shell_script=${sshcs_cryptsetup_script}
+  else
+    cat <<EOF > "${sshcs_shell_script}"
 #!/usr/bin/ash
 
-. "/init_functions"
+. "/usr/local/bin/ssh-cryptsetup-tools"
 
-if [ ! -f "${sshcs_cryptsetup_script}" ]; then
-    err "No cryptsetup script present! Please retry."
-    exit 0
-fi
-
-if [ -c "/dev/mapper/control" ]; then
-    CSQUIET=
-    . "${sshcs_cryptsetup_script}"
-
-    echo ""
-    echo "cryptsetup succeeded! Boot sequence should go on."
-    echo "Please wait and retry for standard SSH service."
-else
-    err "Device resources missing! Please retry."
-fi
 echo ""
+echo "Call ${sshcs_cryptsetup_script} to try unlocking device(s)"
+
+# Now give the user its shell
+/usr/bin/ash
+
+# Check whether we are fully done
+sshcs_check_done 1
 EOF
-    chmod a+x "${dropbear_login_shell}"
+    chmod a+x "${sshcs_shell_script}"
+  fi
 
-    [ ! -d "/var/log" ] && mkdir -p "/var/log"
-    touch "/var/log/lastlog"
+  # /etc/passwd file for the root user
+  echo "root:x:0:0:root:/root:${sshcs_shell_script}" > "/etc/passwd"
+  echo "${sshcs_shell_script}" > "/etc/shells"
 
-    msg "Starting dropbear ..."
-    dropbear -Esgjk -P "${path_dropbear_pid}" ${sshcs_opt_listen}
+  [ ! -d "/var/log" ] && mkdir -p "/var/log"
+  touch "/var/log/lastlog"
 
-    # Actual unlocking
-    sshcs_unlock
+  msg "Starting dropbear ..."
+  dropbear -Esgjk -P "${path_dropbear_pid}" ${sshcs_opt_listen}
 
-    # cleanup dropbear
-    if [ -f "${path_dropbear_pid}" ]; then
-        msg "Stopping dropbear ..."
-        kill $(cat "${path_dropbear_pid}")
-        rm -f "${path_dropbear_pid}"
-    fi
-    rm -f "${sshcs_cryptsetup_script}" "${dropbear_login_shell}" "/etc/passwd" "/etc/shells" "/var/log/lastlog"
-
-    # cleanup /dev/pts if necessary
-    if [ ${dev_pts_mounted} -ne 0 ]; then
-        umount "/dev/pts"
-        rm -R "/dev/pts"
-    fi
+  # Actual unlocking shell
+  sshcs_shell_run
 }
 
 sshcs_cryptpart_process() {
-    # ensure there is a device (handle 'UUID=' format)
-    [ -z "${cryptdev}" ] && return 0
-    [ "${cryptdev#UUID=}" != "${cryptdev}" ] && cryptdev="/dev/disk/by-uuid/${cryptdev#UUID=}"
+  local cryptdev_orig cryptopt cryptargs
 
-    # get crypt options
-    cryptargs=
-    for cryptopt in ${cryptoptions//,/ }; do
-        case ${cryptopt} in
-            discard)
-                cryptargs="${cryptargs} --allow-discards"
-                ;;
+  # ensure there is a device (handle 'UUID=' format)
+  [ -z "${cryptdev}" ] && return 0
+  [ "${cryptdev#UUID=}" != "${cryptdev}" ] && cryptdev="/dev/disk/by-uuid/${cryptdev#UUID=}"
 
-            luks)
-                ;;
+  # get crypt options
+  cryptargs=
+  for cryptopt in ${cryptoptions//,/ }; do
+    case ${cryptopt} in
+      discard)
+        cryptargs="${cryptargs} --allow-discards"
+        ;;
 
-            *)
-                echo "Device ${cryptdev} encryption option '${cryptopt}' not known, ignoring."
-                ;;
-        esac
-    done
+      luks)
+        ;;
 
-    # ensure device is encrypted and handled
-    cryptdev_orig=${cryptdev}
-    if cryptdev=$(resolve_device "${cryptdev_orig}" ${rootdelay}); then
-        if cryptsetup isLuks "${cryptdev}" >/dev/null 2>&1; then
-            dbg "Adding crypt device=${cryptdev} type=${crypttype} name=${cryptname} args=<${cryptargs}> in setup script"
+      *)
+        echo "Device ${cryptdev} encryption option '${cryptopt}' not known, ignoring."
+        ;;
+    esac
+  done
 
-            # update script used to unlock device either in console or SSH
-            [ -s "${sshcs_cryptsetup_script}" ] || cat <<EOF > "${sshcs_cryptsetup_script}"
+  # ensure device is encrypted and handled
+  cryptdev_orig=${cryptdev}
+  if cryptdev=$(resolve_device "${cryptdev_orig}" ${rootdelay}); then
+    if cryptsetup isLuks "${cryptdev}" >/dev/null 2>&1; then
+      dbg "Adding crypt device=${cryptdev} type=${crypttype} name=${cryptname} args=<${cryptargs}> in setup script"
+
+      # update script used to unlock device either in console or SSH
+      [ -s "${sshcs_cryptsetup_script}" ] || cat <<'EOF' > "${sshcs_cryptsetup_script}"
+#!/usr/bin/ash
+
+. "/usr/local/bin/ssh-cryptsetup-tools"
+
 cycle_or_retry() {
-    local res
+  local res
 
-    read -n 1 -s -t 5 -p "Whithin 5s press 'P' to poweroff, 'R' to reboot or any other key to retry. " res
-    echo ""
-    if [ "\${res}" = "P" ]; then
-        poweroff -f
-    elif [ "\${res}" = "R" ]; then
-        reboot -f
-    fi
+  read -n 1 -s -t 5 -p "Within 5s press 'P' to poweroff, 'R' to reboot or any other key to retry. " res
+  echo ""
+  [ "${res}" == "P" ] && poweroff -f
+  [ "${res}" == "R" ] && reboot -f
 }
+
+try_unlock() {
 EOF
 
-            cat <<EOF >> "${sshcs_cryptsetup_script}"
-# loop until device is available
-while [ ! -e "/dev/mapper/${cryptname}" ]; do
+      cat <<EOF >> "${sshcs_cryptsetup_script}"
+  # loop until device is available
+  while [ ! -e "/dev/mapper/${cryptname}" ]; do
+    if [ \${sshcs_unlocked_test:-0} -eq 1 ]; then
+      sshcs_unlocked=0
+      return
+    fi
     if cryptsetup open --type "${crypttype}" "${cryptdev}" "${cryptname}" ${cryptargs} "\${CSQUIET}"; then
-        if poll_device "/dev/mapper/${cryptname}" ${rootdelay}; then
-            killall cryptsetup > /dev/null 2>&1
-            break
-        fi
-        err "Device still not mapped! Please wait or retry."
-    elif [ ! -e "/dev/mapper/${cryptname}" ]; then
-        err "cryptsetup failed! Please retry."
-    else
+      if poll_device "/dev/mapper/${cryptname}" ${rootdelay}; then
+        killall cryptsetup > /dev/null 2>&1
         break
+      fi
+      err "Device still not mapped! Please wait or retry."
+    elif [ ! -e "/dev/mapper/${cryptname}" ]; then
+      err "cryptsetup failed! Please retry."
+    else
+      break
     fi
 
     cycle_or_retry
-done
+  done
 EOF
-        else
-            err "Failed to manage encrypted device ${cryptdev_orig}: not a LUKS volume."
-        fi
+    else
+      err "Failed to manage encrypted device ${cryptdev_orig}: not a LUKS volume."
     fi
+  fi
+}
+
+sshcs_cryptpart_setup() {
+  local cryptdev crypttype cryptname cryptpass cryptoptions
+
+  # check encrypted devices to handle
+  cryptdev=
+  crypttype=luks
+  while read cryptname cryptdev cryptpass cryptoptions; do
+    # skip comment lines
+    [ "${cryptname:0:1}" = "#" ] && continue
+    # skip devices with given password
+    [ -n "${cryptpass}" ] && [ "${cryptpass}" != "none" ] && [ "${cryptpass}" != "-" ] && continue
+
+    sshcs_cryptpart_process
+  done < "${etc_crypttab}"
+
+  # Nothing else to do if there is no device we can unlock
+  [ -s "${sshcs_cryptsetup_script}" ] || return 0
+
+  cat <<'EOF' >> "${sshcs_cryptsetup_script}"
+  # No other device to unlock
+}
+
+if [ -c "/dev/mapper/control" ]; then
+  CSQUIET=
+  try_unlock
+
+  [ ${sshcs_unlocked_test:-0} -eq 1 ] && return
+  sshcs_check_done 0
+else
+  if [ \${sshcs_unlocked_test:-0} -eq 1 ]; then
+    sshcs_unlocked=0
+    return
+  fi
+  echo ""
+  err "Device resources missing! Please retry."
+fi
+EOF
+  chmod a+x "${sshcs_cryptsetup_script}"
 }
 
 run_hook() {
-    local etc_crypttab="/etc/crypttab"
-    local sshcs_env="/etc/initcpio/sshcs_env"
-    local path_dropbear_pid="/.dropbear.pid"
-    local dropbear_login_shell="/.cryptsetup_shell.sh"
-    local sshcs_cryptsetup_script="/.cryptsetup_script.sh"
-    local net_env="/.net_env.sh"
-    local line iparg net_address net_device ipconfig_out net_netmask net_gateway net_dns0 net_dns1
-    local cryptdev cryptdev_orig crypttype cryptname cryptpass cryptoptions cryptopt cryptargs CSQUIET
+  local etc_crypttab="/etc/crypttab"
+  local path_dropbear_pid="/.dropbear.pid"
+  local sshcs_shell_script="/.sshcs_shell.sh"
+  local net_env="/.sshcs_net_env.sh"
+  local line net_device
+  local CSQUIET
 
-    # Load our options
-    sshcs_env_load
+  # Note: options were loaded already
 
-    # sanity check: crypttab should be present
-    [ ! -e "${etc_crypttab}" ] && {
-        dbg "No crypttab configuration to process"
-        return 0
-    }
+  # sanity check: crypttab should be present
+  [ ! -e "${etc_crypttab}" ] && {
+    dbg "No crypttab configuration to process"
+    return 0
+  }
 
-    modprobe -a -q dm-crypt >/dev/null 2>&1
-    [ "${quiet}" = "y" ] && CSQUIET=">/dev/null"
+  # Initialize random generator ASAP.
+  # May delay first SSH login by a few seconds otherwise.
+  (dd if=/dev/urandom of=/dev/null bs=4 count=1 status=none > /dev/null 2>&1) &
+  (dd if=/dev/random of=/dev/null bs=4 count=1 status=none > /dev/null 2>&1) &
 
-    umask 0022
+  modprobe -a -q dm-crypt >/dev/null 2>&1
+  [ "${quiet}" = "y" ] && CSQUIET=">/dev/null"
 
-    # check encrypted devices to handle
-    cryptdev=
-    crypttype=luks
-    while read cryptname cryptdev cryptpass cryptoptions; do
-        # skip comment lines
-        [ "${cryptname:0:1}" = "#" ] && continue
-        # skip devices with given password
-        [ -n "${cryptpass}" ] && [ "${cryptpass}" != "none" ] && [ "${cryptpass}" != "-" ] && continue
+  umask 0022
 
-        sshcs_cryptpart_process
-    done < "${etc_crypttab}"
+  # Setup script used to unlock device either in console or SSH
+  sshcs_cryptpart_setup
+  if [ ! -e "${sshcs_cryptsetup_script}" ]; then
+    err "No encrypted device found! Skipping crypt remote unlocking."
+    return 0
+  fi
 
-    if [ ! -e "${sshcs_cryptsetup_script}" ]; then
-        err "No encrypted device found! Skipping crypt remote unlocking."
-        return 0
-    fi
+  # start and check network
+  if ! sshcs_net_start; then
+    err "Net interface not available! Skipping crypt remote unlocking."
+    # We still allow to unlock locally with timeout
+    sshcs_shell_run
+    return 0
+  fi
 
-    # start and check network
-    if ! sshcs_net_start; then
-        err "Net interface not available! Skipping crypt remote unlocking."
-        # We still allow to unlock locally with timeout
-        sshcs_unlock
-        # stop the network if possible
-        sshcs_net_done
-        return 0
-    fi
-
-    # time to unlock (through console or dropbear)
-    sshcs_dropbear_unlock
-    # stop the network before going on in boot sequence
-    sshcs_net_done
+  # time to unlock (through console or dropbear)
+  sshcs_dropbear_run
 }
