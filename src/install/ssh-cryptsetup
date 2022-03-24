@@ -52,56 +52,71 @@ build() {
 
   sshcs_check_keys
 
-  add_checked_modules "/drivers/net/"
-  # Note: parts of this script (modules/binaries added) are the same than the
-  # 'encrypt' install script (/usr/lib/initcpio/install/encrypt) which is the
-  # nominal one to deal with encrypted volumes at boot time.
-  add_module dm-crypt
-  # Note: crypto modules are necessary
-  if [ -n "${CRYPTO_MODULES}" ]; then
+  # Note: parts of this script (modules/binaries/files added) are the same than
+  # other install scripts (/usr/lib/initcpio/install/):
+  #   - 'encryp': nominal support of encrypted volumes at boot time
+  #   - 'net': network tools
+
+  ## Modules
+  # (from 'encrypt')
+  add_module 'dm-crypt'
+  add_module 'dm-integrity'
+  if [[ $CRYPTO_MODULES ]]; then
     local mod
-    for mod in ${CRYPTO_MODULES}; do
-      add_module "${mod}"
+    for mod in $CRYPTO_MODULES; do
+      add_module "$mod"
     done
   else
-    add_all_modules "/crypto/"
+    add_all_modules '/crypto/'
   fi
 
-  # Note: dmsetup is necessary for device mapper features
-  add_binary "cryptsetup"
-  add_binary "dmsetup"
-  add_binary "dropbear"
-  add_binary "ip"
-  add_binary "/usr/lib/initcpio/ipconfig" "/bin/ipconfig"
-  add_binary "ethtool"
+  # (from 'net')
+  add_checked_modules '/drivers/net/'
 
-  # Our hook files
+
+  ## Binaries
+  # (from 'encrypt')
+  add_binary 'cryptsetup'
+  # cryptsetup calls pthread_create(), which dlopen()s libgcc_s.so.1
+  # Note: at least necessary for LUKS v2 volumes.
+  # Also see similar/related bug reports (e.g. https://bugs.debian.org/cgi-bin/bugreport.cgi?bug=950254).
+  add_binary '/usr/lib/libgcc_s.so.1'
+
+  # (from 'net')
+  add_binary '/usr/lib/initcpio/ipconfig' '/bin/ipconfig'
+
+  # (ours)
+  # Note: dmsetup is necessary for device mapper features
+  add_binary 'dmsetup'
+  add_binary 'dropbear'
+  add_binary 'ip'
+  add_binary 'ethtool'
+
+
+  ## Other files
+  # (from 'encrypt')
+  # cryptsetup-related files
+  map add_udev_rule \
+      '10-dm.rules' \
+      '13-dm-disk.rules' \
+      '95-dm-notify.rules' \
+      '/usr/lib/initcpio/udev/11-dm-initramfs.rules'
+
+  # (ours)
+  # Our script and options
   [ -e "${sshcs_env}" ] && add_file "${sshcs_env}"
   # Note: use /usr/local/bin, even though everything actually points to /usr/bin
   # in initramfs.
-  add_file "/usr/lib/initcpio/hooks/ssh-cryptsetup-tools" "/usr/local/bin/ssh-cryptsetup-tools"
-
-  # auth-related files
-  add_file "/lib/libnss_files.so"
+  add_file '/usr/lib/initcpio/hooks/ssh-cryptsetup-tools' '/usr/local/bin/ssh-cryptsetup-tools'
 
   # SSH-related files
-  add_file "${dropbear_authorized_keys}" "/root/.ssh/authorized_keys"
+  add_file "${dropbear_authorized_keys}" '/root/.ssh/authorized_keys'
   for keytype in "${dropbear_key_types[@]}"; do
     add_file "${dropbear_keyfile_prefix}${keytype}${dropbear_keyfile_suffix}"
   done
 
-  # cryptsetup-related files
+  # crypt partitions
   add_file "${etc_crypttab}"
-  add_file "/usr/lib/udev/rules.d/10-dm.rules"
-  add_file "/usr/lib/udev/rules.d/13-dm-disk.rules"
-  add_file "/usr/lib/udev/rules.d/95-dm-notify.rules"
-  add_file "/usr/lib/initcpio/udev/11-dm-initramfs.rules" "/usr/lib/udev/rules.d/11-dm-initramfs.rules"
-
-  # At least with LUKS v2 volumes, cryptsetup calls pthread_cancel(), which
-  # dlopen()s libgcc_s.so.1.
-  # See the nominal 'encrypt' module, and similar/related bug reports (e.g.
-  # https://bugs.debian.org/cgi-bin/bugreport.cgi?bug=950254).
-  add_binary "/usr/lib/libgcc_s.so.1"
 
   add_runscript
 }
