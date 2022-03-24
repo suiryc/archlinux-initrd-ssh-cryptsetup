@@ -1,6 +1,6 @@
 # Maintainer: Julien Coloos <julien.coloos [at] gmail [dot] com>
 pkgname=initrd-ssh-cryptsetup
-pkgver=1.0
+pkgver=1.1
 pkgrel=1
 pkgdesc="Allows to remotely unlock LUKS-encrypted devices over SSH"
 arch=('any')
