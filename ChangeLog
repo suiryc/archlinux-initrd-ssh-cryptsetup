@@ -1,75 +1,95 @@
+2022-03-24 Julien Coloos <julien.coloos [at] gmail [dot] com>
+
+        * v1.1-1
+        Refactored install script to more easily spot code coming from other
+        nominal hooks.
+        Updated install script message with latest available options.
+
+        Removed dependency to '/lib/libnss_files.so', as it does not exist and
+        should not be needed anymore.
+        Prevents unwanted warning when building initcpio
+          ==> ERROR: file not found: `/lib/libnss_files.so'
+        See: https://bugs.archlinux.org/task/73702
+
+
 2021-11-13 Julien Coloos <julien.coloos [at] gmail [dot] com>
 
         * v1.0-1
-        Option to use login shell instead of cryptsetup unlocking script
-        Option to re-enable Wake-on-LAN on network device
+        Option to use login shell instead of cryptsetup unlocking script.
+        Option to re-enable Wake-on-LAN on network device.
 
 
 2021-11-12 Julien Coloos <julien.coloos [at] gmail [dot] com>
 
         * v0.9-2
-        Use SHA256 checksums instead of MD5
+        Use SHA256 checksums instead of MD5.
 
 
 2021-10-24 Julien Coloos <julien.coloos [at] gmail [dot] com>
 
         * v0.9-1
-        Try to print network devices information when interface setup fails
+        Try to print network devices information when interface setup fails.
 
 
 2021-08-15 Julien Coloos <julien.coloos [at] gmail [dot] com>
 
         * v0.8-1
-        Include 'libgcc_s.so.1' which is necessary for (at least) proper LUKS v2 handling
+        Include 'libgcc_s.so.1' which is necessary for (at least) proper LUKS
+        v2 handling.
 
 
 2020-07-14 Julien Coloos <julien.coloos [at] gmail [dot] com>
 
         * v0.7-1
-        Dropped 'dsa' private key support; added 'ed25519' private key support
+        Dropped 'dsa' private key support; added 'ed25519' private key support.
 
 
 2018-03-13 Julien Coloos <julien.coloos [at] gmail [dot] com>
 
         * v0.6-1
-        Dropped '-m' option when calling dropbear (latest ArchLinux version does not handle it)
+        Dropped '-m' option when calling dropbear (latest ArchLinux version
+        does not handle it).
 
 
 2017-06-25 Julien Coloos <julien.coloos [at] gmail [dot] com>
 
         * v0.5-1
-        Fixed cryptsetup additional arguments handling: were not properly passed
+        Fixed cryptsetup additional arguments handling: were not properly
+        passed.
 
 
 2017-06-25 Julien Coloos <julien.coloos [at] gmail [dot] com>
 
         * v0.4-1
-        Fixed TRIM option handling in /etc/crypttab: 'discard' ('allow-discards' being the switch name to use in cryptsetup)
+        Fixed TRIM option handling in /etc/crypttab: 'discard'
+        ('allow-discards' being the switch name to use in cryptsetup).
 
 
 2015-11-22 Julien Coloos <julien.coloos [at] gmail [dot] com>
 
         * v0.3-1
-        Added configurable timeout for ipconfig
-        Moved configuration file from /etc/dropbear/initrd.env to /etc/initcpio/sshcs_env
+        Added configurable timeout for ipconfig.
+        Moved configuration file from /etc/dropbear/initrd.env to
+        /etc/initcpio/sshcs_env.
 
 
 2014-05-20 Julien Coloos <julien.coloos [at] gmail [dot] com>
 
         * v0.2-1
-        Removed unnecessary dependency: psmisc
-        Added configurable timeout to unlock devices before automatic poweroff
+        Removed unnecessary dependency: psmisc.
+        Added configurable timeout to unlock devices before automatic poweroff.
 
 
 2014-05-19 Julien Coloos <julien.coloos [at] gmail [dot] com>
 
         * v0.1-1
 
-        * Code adapted from dropbear_initrd_encrypt (https://aur.archlinux.org/packages/dropbear_initrd_encrypt/)
-        Reworked code
-        Dropped non-LUKS support
-        Rely on /etc/crypttab
-        Handle multiple devices to unlock
-        Merged dropbear and encryptssh hooks
-        Better resources cleanup
+        Code adapted from dropbear_initrd_encrypt.
+        See: https://aur.archlinux.org/packages/dropbear_initrd_encrypt/
 
+        Reworked code.
+        Dropped non-LUKS support.
+        Rely on /etc/crypttab.
+        Handle multiple devices to unlock.
+        Merged dropbear and encryptssh hooks.
+        Better resources cleanup.
