@@ -117,13 +117,25 @@ LUKS encrypted devices to unlock are derived from '/etc/crypttab', which must
 be present.
 Some options can be set in '/etc/initcpio/sshcs_env' (file is sourced in
 initrd shell):
- * 'sshcs_opt_timeout_ipconfig': time (s) to configure IP
-   - default: 10 seconds
- * 'sshcs_opt_listen': listening port (22 by default)
- * 'sshcs_opt_timeout_poweroff': time (s) to unlock devices before automatic
-   powering off
-   - default (and minimum value): 2 minutes
+ * 'sshcs_opt_debug': whether to be more verbose about ongoing actions
+   - default: '0'
+   - any non-zero value to enable
+ * 'sshcs_opt_net_wol': Wake-on-LAN option to set on network device
+   - default: 'g' (MagicPacket™)
+   - usually WOL is disabled once in initramfs shell
+   - set empty to not change network device WOL setting
+ * 'sshcs_opt_timeout_ipconfig': time (in seconds) to configure IP
+   - default: '10'
+ * 'sshcs_opt_listen': SSH listening port
+   - default: '22'
+ * 'sshcs_opt_timeout_poweroff': time (in seconds) to unlock devices before
+   automatic powering off
+   - default (and minimum value): '120' (2 minutes)
    - negative value to deactivate
+ * 'sshcs_opt_use_shell': whether to start a full 'ash' shell
+   - default: '0'
+   - '1' to enable
+   - when disabled (the default), a script to unlock devices is executed instead
 
 Each SSH server key ('dropbear_rsa_host_key', 'dropbear_ecdsa_host_key' and
 'dropbear_ed25519_host_key' in '/etc/dropbear' folder) is imported from OpenSSH
