@@ -1,3 +1,15 @@
+2025-11-15 Julien Coloos <julien.coloos [at] gmail [dot] com>
+
+        * v1.1-2
+        Removed 11-dm-initramfs.rules, which was added to 10-dm.rules.
+        See: https://gitlab.archlinux.org/archlinux/mkinitcpio/mkinitcpio/-/commit/589e0397ea55e61a08fdbcab52ad4639d382f08e
+
+        Use full version (pkgver and pkgrel) for source archive name.
+        Sometimes we need to change the sources, but only for minor external
+        dependencies diff (e.g. adding/removing upstream source), in which
+        case we wish to only bump pkgrel.
+
+
 2022-03-24 Julien Coloos <julien.coloos [at] gmail [dot] com>
 
         * v1.1-1
