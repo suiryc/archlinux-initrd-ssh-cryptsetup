@@ -68,8 +68,8 @@ For example:
 ## Building notes
 1. Modify the sources (features in `src`, and/or package building files)
 2. If `src` was modified
-   * bump `pkgver` in `PKGBUILD`
-   * archive the `src` folder in `$pkgname-$pkgver.tar.xz` file; e.g.: `tar -cJf initrd-ssh-cryptsetup-$(grep "^pkgver=" PKGBUILD | cut -d'=' -f2).tar.xz src`
+   * bump `pkgver`, or `pkgrel`, in `PKGBUILD`
+   * archive the `src` folder in `$pkgname-$pkgver-$pkgrel.tar.xz` file; e.g.: `tar -cJf initrd-ssh-cryptsetup-$(grep "^pkgver=" PKGBUILD | cut -d'=' -f2)-$(grep "^pkgrel=" PKGBUILD | cut -d'=' -f2).tar.xz src`
    * upload the archive on the online repository (pointed by `PKGBUILD`)
 3. Update ChangeLog
 4. Update `PKGBUILD`
