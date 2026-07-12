@@ -74,6 +74,7 @@ sshcs_net_done() {
 
 sshcs_trapped_timeout() {
   log_err "Timeout reached! Powering off."
+  sleep 2
   poweroff -f
   exit
 }
