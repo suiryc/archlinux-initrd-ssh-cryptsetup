@@ -114,6 +114,13 @@ sshcs_shell_run() {
 
   # actual script (shared with SSH login) with which we can unlock devices
   sshcs_unlocked_test=0
+  log_dbg "Running ${sshcs_shell_script}"
+  # Belt and suspenders: if the script does not exist, trying to source it
+  # actually triggers a kernel panic.
+  if [ ! -e "${sshcs_shell_script}" ]; then
+    log_err "No script to run! ${sshcs_shell_script} does not exist!"
+    return
+  fi
   . "${sshcs_shell_script}"
 }
 
@@ -126,26 +133,6 @@ sshcs_dropbear_run() {
     mkdir -p "/dev/pts"
     mount -t devpts devpts "/dev/pts"
     dev_pts_mounted=1
-  fi
-
-  if [ ${sshcs_opt_use_shell} -eq 0 ]; then
-    sshcs_shell_script=${sshcs_cryptsetup_script}
-  else
-    cat <<EOF > "${sshcs_shell_script}"
-#!/usr/bin/ash
-
-. "/usr/local/bin/ssh-cryptsetup-tools"
-
-echo ""
-echo "Call ${sshcs_cryptsetup_script} to try unlocking device(s)"
-
-# Now give the user its shell
-/usr/bin/ash
-
-# Check whether we are fully done
-sshcs_check_done 1
-EOF
-    chmod a+x "${sshcs_shell_script}"
   fi
 
   # /etc/passwd file for the root user
@@ -241,6 +228,11 @@ EOF
 sshcs_cryptpart_setup() {
   local cryptdev crypttype cryptname cryptpass cryptoptions
 
+  # Notes:
+  # The script is built piece by piece to unlock each target device.
+  # If there is no device to unlock, there is no script, and boot should simply
+  # go on as usual.
+
   # check encrypted devices to handle
   cryptdev=
   crypttype=luks
@@ -256,6 +248,8 @@ sshcs_cryptpart_setup() {
   # Nothing else to do if there is no device we can unlock
   [ -s "${sshcs_cryptsetup_script}" ] || return 0
 
+  # There were deviced to unlock.
+  # We can now finish the script.
   cat <<'EOF' >> "${sshcs_cryptsetup_script}"
   # No other device to unlock
 }
@@ -276,6 +270,28 @@ else
 fi
 EOF
   chmod a+x "${sshcs_cryptsetup_script}"
+
+  if [ ${sshcs_opt_use_shell} -eq 0 ]; then
+    # The script we built *is* the shell to run.
+    sshcs_shell_script=${sshcs_cryptsetup_script}
+  else
+    # User will have a full shell, and can call the script if needed.
+    cat <<EOF > "${sshcs_shell_script}"
+#!/usr/bin/ash
+
+. "/usr/local/bin/ssh-cryptsetup-tools"
+
+echo ""
+echo "Call ${sshcs_cryptsetup_script} to try unlocking device(s)"
+
+# Now give the user its shell
+/usr/bin/ash
+
+# Check whether we are fully done
+sshcs_check_done 1
+EOF
+    chmod a+x "${sshcs_shell_script}"
+  fi
 }
 
 run_hook() {
