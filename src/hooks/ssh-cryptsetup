@@ -8,18 +8,18 @@ sshcs_net_start() {
   # we must have an 'ip' setting, and a device in it
   [ -z "${ip}" ] && [ -n "${nfsaddrs}" ] && ip="${nfsaddrs}"
   [ -z "${ip}" ] && {
-    dbg "No ip setting to setup network"
+    log_dbg "No ip setting to setup network"
     return 1
   }
 
   net_device=$(echo ${ip} | cut -d: -f6)
   [ -z "${net_device}" ] && {
-    dbg "No network device to setup"
+    log_dbg "No network device to setup"
     return 1
   }
 
   if [ "${sshcs_opt_net_wol:-d}" != "d" ]; then
-    dbg "Setting network device=${net_device} wol=${sshcs_opt_net_wol}"
+    log_dbg "Setting network device=${net_device} wol=${sshcs_opt_net_wol}"
     ethtool -s "${net_device}" wol "${sshcs_opt_net_wol}"
   fi
 
@@ -35,7 +35,7 @@ sshcs_net_start() {
   # ipconfig manual: https://git.kernel.org/pub/scm/libs/klibc/klibc.git/tree/usr/kinit/ipconfig/README.ipconfig
   ipconfig_out=$(ipconfig -t "${sshcs_opt_timeout_ipconfig}" "ip=${ip}")
   if [ $? -ne 0 ]; then
-    err "IP configuration timeout!"
+    log_err "IP configuration timeout!"
     echo "Devices probing:"
     ipconfig -n -t 5 -c none all
     return 1
@@ -58,7 +58,7 @@ sshcs_net_start() {
   . "${net_env}"
   rm -f "${net_env}"
 
-  echo "IP-Config: device=${net_device} ip=${net_address}/${net_netmask} gw=${net_gateway} dns0=${net_dns0} dns1=${net_dns1}"
+  log_msg "IP-Config: device=${net_device} ip=${net_address}/${net_netmask} gw=${net_gateway} dns0=${net_dns0} dns1=${net_dns1}"
 
   [ -n "${net_address}" ]
 }
@@ -66,14 +66,14 @@ sshcs_net_start() {
 sshcs_net_done() {
   # we are done with the network
   if [ -n "${net_device}" ]; then
-    dbg "Setting network device=${net_device} down"
+    log_dbg "Setting network device=${net_device} down"
     ip addr flush dev "${net_device}"
     ip link set dev "${net_device}" down
   fi
 }
 
 sshcs_trapped_timeout() {
-  err "Timeout reached! Powering off."
+  log_err "Timeout reached! Powering off."
   poweroff -f
   exit
 }
@@ -105,7 +105,7 @@ sshcs_untrap_timeout() {
   proc_parse_stat ${pid_timeout} && kill ${pid_timeout}
   pid_timeout=
   trap - SIGALRM
-  msg "Timeout cleared."
+  log_dbg "Timeout cleared."
 }
 
 sshcs_shell_run() {
@@ -155,7 +155,7 @@ EOF
   [ ! -d "/var/log" ] && mkdir -p "/var/log"
   touch "/var/log/lastlog"
 
-  msg "Starting dropbear ..."
+  log_dbg "Starting dropbear ..."
   dropbear -Esgjk -P "${path_dropbear_pid}" ${sshcs_opt_listen}
 
   # Actual unlocking shell
@@ -190,7 +190,7 @@ sshcs_cryptpart_process() {
   cryptdev_orig=${cryptdev}
   if cryptdev=$(resolve_device "${cryptdev_orig}" ${rootdelay}); then
     if cryptsetup isLuks "${cryptdev}" >/dev/null 2>&1; then
-      dbg "Adding crypt device=${cryptdev} type=${crypttype} name=${cryptname} args=<${cryptargs}> in setup script"
+      log_dbg "Adding crypt device=${cryptdev} type=${crypttype} name=${cryptname} args=<${cryptargs}> in setup script"
 
       # update script used to unlock device either in console or SSH
       [ -s "${sshcs_cryptsetup_script}" ] || cat <<'EOF' > "${sshcs_cryptsetup_script}"
@@ -222,9 +222,9 @@ EOF
         killall cryptsetup > /dev/null 2>&1
         break
       fi
-      err "Device still not mapped! Please wait or retry."
+      log_err "Device still not mapped! Please wait or retry."
     elif [ ! -e "/dev/mapper/${cryptname}" ]; then
-      err "cryptsetup failed! Please retry."
+      log_err "cryptsetup failed! Please retry."
     else
       break
     fi
@@ -233,7 +233,7 @@ EOF
   done
 EOF
     else
-      err "Failed to manage encrypted device ${cryptdev_orig}: not a LUKS volume."
+      log_err "Failed to manage encrypted device ${cryptdev_orig}: not a LUKS volume."
     fi
   fi
 }
@@ -272,7 +272,7 @@ else
     return
   fi
   echo ""
-  err "Device resources missing! Please retry."
+  log_err "Device resources missing! Please retry."
 fi
 EOF
   chmod a+x "${sshcs_cryptsetup_script}"
@@ -290,7 +290,7 @@ run_hook() {
 
   # sanity check: crypttab should be present
   [ ! -e "${etc_crypttab}" ] && {
-    dbg "No crypttab configuration to process"
+    log_dbg "No crypttab configuration to process"
     return 0
   }
 
@@ -307,13 +307,13 @@ run_hook() {
   # Setup script used to unlock device either in console or SSH
   sshcs_cryptpart_setup
   if [ ! -e "${sshcs_cryptsetup_script}" ]; then
-    err "No encrypted device found! Skipping crypt remote unlocking."
+    log_err "No encrypted device found! Skipping crypt remote unlocking."
     return 0
   fi
 
   # start and check network
   if ! sshcs_net_start; then
-    err "Net interface not available! Skipping crypt remote unlocking."
+    log_err "Net interface not available! Skipping crypt remote unlocking."
     # We still allow to unlock locally with timeout
     sshcs_shell_run
     return 0

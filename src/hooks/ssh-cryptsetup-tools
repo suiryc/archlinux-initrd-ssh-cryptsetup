@@ -2,13 +2,35 @@
 
 . "/init_functions"
 
-dbg () {
-  [ ${sshcs_opt_debug} != 0 ] && echo "$@"
+# Log debug message, if debug enabled.
+# Also log as kmsg if enabled.
+log_dbg() {
+  [ ${sshcs_opt_debug} -eq 0 ] && return 0
+  echo "$@"
+  [ ${sshcs_opt_log_kmsg} -eq 0 ] && return 0
+  echo "<31>sshcs: $@" > /dev/kmsg
+}
+
+# Log information message, even if quiet.
+# Also log as kmsg if enabled.
+log_msg() {
+  echo "$@"
+  [ ${sshcs_opt_log_kmsg} -eq 0 ] && return 0
+  echo "<30>sshcs: $@" > /dev/kmsg
+}
+
+# Log error message (prefixed with "ERROR: " in console).
+# Also log as kmsg if enabled.
+log_err() {
+  err "$@"
+  [ ${sshcs_opt_log_kmsg} -eq 0 ] && return 0
+  echo "<27>sshcs: $@" > /dev/kmsg
 }
 
 sshcs_env_load() {
   local sshcs_env="/etc/initcpio/sshcs_env"
 
+  local log_kmsg_default=1
   local debug_default=0
   local net_wol_default=g
   local timeout_ipconfig_default=10
@@ -18,6 +40,7 @@ sshcs_env_load() {
   [ ${sshcs_env_loaded:-0} -eq 1 ] && return
   [ -e "${sshcs_env}" ] && . "${sshcs_env}"
   sshcs_env_loaded=1
+  [ -z "${sshcs_opt_log_kmsg}" ] && sshcs_opt_log_kmsg=${log_kmsg_default}
   [ -z "${sshcs_opt_debug}" ] && sshcs_opt_debug=${debug_default}
   [ -z "${sshcs_opt_net_wol}" ] && sshcs_opt_net_wol=${net_wol_default}
   [ -z "${sshcs_opt_timeout_ipconfig}" ] && sshcs_opt_timeout_ipconfig=${timeout_ipconfig_default}
@@ -89,7 +112,7 @@ sshcs_cleanup() {
 
     # cleanup dropbear
     if [ -f "${path_dropbear_pid}" ]; then
-      msg "Stopping dropbear ..."
+      log_dbg "Stopping dropbear ..."
       kill $(cat "${path_dropbear_pid}")
       rm -f "${path_dropbear_pid}"
     fi
@@ -99,13 +122,13 @@ sshcs_cleanup() {
       # This is necessary to properly terminate both these shells and the spawned
       # SSH processes.
       # Reminder: "... | ..." does fork a subshell
-      dbg "Searching SSH shells ..."
+      log_dbg "Searching SSH shells ..."
       pgrep_output=$(pgrep /usr/bin/ash)
       pgrep_output=$(echo "${pgrep_output}" | grep -E -v "^(|1|$$)$")
       echo "${pgrep_output}" | while read pid; do
         proc_parse_stat ${pid} || continue
         proc_find_parent_cmd ${pid} "dropbear" || continue
-        dbg "Killing SSH shell pid=${pid}"
+        log_dbg "Killing SSH shell pid=${pid}"
         kill -SIGHUP ${pid}
       done
     fi
@@ -130,16 +153,18 @@ sshcs_cleanup() {
     # Note: as a side effect, this will also kill the shell that was forked to
     # trigger a timeout, which is fine (we want to kill it, either from here or
     # from the init shell).
-    dbg "Searching console shells ..."
+    log_dbg "Searching console shells ..."
     pgrep_output=$(pgrep /usr/bin/ash)
     pgrep_output=$(echo "${pgrep_output}" | grep -E -v "^(|1|$$)$")
     echo "${pgrep_output}" | while read pid; do
       proc_find_parent_cmd ${pid} "dropbear" && continue
-      dbg "Killing console shell pid=${pid}"
+      log_dbg "Killing console shell pid=${pid}"
       kill -SIGHUP ${pid}
     done
   fi
   # else: when in SSH shell script, we have nothing else to do other than exit.
+
+  log_dbg "All done"
 }
 
 sshcs_check_done() {
@@ -161,12 +186,12 @@ sshcs_check_done() {
     echo ""
     # When finalizing in console, power off
     if [ ${finalize} -eq 1 ] &&  proc_is_console; then
-      err "Devices are still locked! Powering off."
+      log_err "Devices are still locked! Powering off."
       poweroff -f
     fi
 
     # When in shell or SSH, let user try again
-    err "Devices are still locked! Please retry."
+    log_err "Devices are still locked! Please retry."
     return
   fi
 
@@ -179,7 +204,7 @@ sshcs_check_done() {
   fi
 
   echo ""
-  echo "cryptsetup succeeded! Boot sequence should go on."
+  log_msg "cryptsetup succeeded! Boot sequence should go on."
   proc_is_console || echo "Please wait and reconnect to nominal SSH service."
 
   sshcs_cleanup
