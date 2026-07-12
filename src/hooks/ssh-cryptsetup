@@ -88,9 +88,11 @@ sshcs_trap_timeout() {
     echo "To deactivate, please unlock devices"
     trap sshcs_trapped_timeout SIGALRM
     (
+      # Wait for timeout
       sleep ${sshcs_opt_timeout_poweroff}
+      # Signal process (triggers poweroff)
       kill -SIGALRM ${pid_init}
-      # Signal is not processed if cryptsetup is waiting for the password
+      # Note: signal is not processed if cryptsetup is waiting for the password
       killall cryptsetup > /dev/null 2>&1
     ) &
     pid_timeout=$!
