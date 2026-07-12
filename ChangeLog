@@ -1,3 +1,13 @@
+2026-07-12 Julien Coloos <julien.coloos [at] gmail [dot] com>
+
+        * v1.2-1
+        Fix kernel panic when network is not available.
+
+        New option to log some messages to kmsg too.
+
+        Change network speed to 10M during boot, to reduce consumption upon WoL.
+
+
 2025-11-15 Julien Coloos <julien.coloos [at] gmail [dot] com>
 
         * v1.1-2
