@@ -4,26 +4,28 @@ The code was reworked from legacy dropbear_initrd_encrypt AUR package.
 
 ## Installation
 After cloning the repo, installation is done as for an AUR package, e.g.:
-
-    makepkg -sri
-
+```bash
+makepkg -sri
+```
 
 ## Dropbear
 SSH server key need to be generated for `dropbear`.  
 Either a new key can be generated with `dropbearkey`, e.g.:
-
-    dropbearkey -t ecdsa -f /etc/dropbear/dropbear_ecdsa_host_key
+```bash
+dropbearkey -t ecdsa -f /etc/dropbear/dropbear_ecdsa_host_key
+```
 Or an existing OpenSSH key can be converted with `dropbearconvert` (useful so that the server fingerprint is the same with both), e.g.:
-
-    dropbearconvert openssh dropbear /etc/ssh/ssh_host_ecdsa_key /etc/dropbear/dropbear_ecdsa_host_key
+```bash
+dropbearconvert openssh dropbear /etc/ssh/ssh_host_ecdsa_key /etc/dropbear/dropbear_ecdsa_host_key
+```
 Notes:
    * `rsa` and `ed25519` types are also handled
    * OpenSSH keys must be in `PEM` format for `dropbearconvert` to properly work
 
 If necessary an existing key file can be converted to `PEM` format using `ssh-keygen`:
-
-    ssh-keygen -A -p -m PEM -f /etc/ssh/ssh_host_ecdsa_key
-
+```bash
+ssh-keygen -A -p -m PEM -f /etc/ssh/ssh_host_ecdsa_key
+```
 
 ## Configuration
 As explained upon installation, the following things need to be done:
@@ -38,13 +40,18 @@ The LUKS-encrypted devices to unlock are derived from `/etc/crypttab`.
 
 
 Some options can be set in `/etc/initcpio/sshcs_env` (file is sourced in initramfs shell):
+   * `sshcs_opt_log_kmsg`: whether to log (debug, info, error) messages to kmsg too
+      - default: `1`
+      - many messages are only printed on console and are not concerned
+      - by default (debug disabled), only useful messages are concerned
+      - set `0` to disable
    * `sshcs_opt_debug`: whether to be more verbose about ongoing actions
       - default: `0`
       - any non-zero value to enable
    * `sshcs_opt_net_wol`: Wake-on-LAN option to set on network device
       - default: `g` (MagicPacket™)
-      - usually WOL is disabled once in initramfs shell
-      - set empty to not change network device WOL setting
+      - usually WoL is disabled once in initramfs shell
+      - set empty to not change network device WoL setting
    * `sshcs_opt_timeout_ipconfig`: time (in seconds) to configure IP
       - default: `10`
    * `sshcs_opt_listen`: SSH listening port
@@ -58,12 +65,12 @@ Some options can be set in `/etc/initcpio/sshcs_env` (file is sourced in initram
       - when disabled (the default), a script to unlock devices is executed instead
 
 For example:
-
-    sshcs_opt_timeout_ipconfig=30
-    sshcs_opt_listen=2222
-    sshcs_opt_timeout_poweroff=-1
-    sshcs_opt_use_shell=1
-
+```bash
+sshcs_opt_timeout_ipconfig=30
+sshcs_opt_listen=2222
+sshcs_opt_timeout_poweroff=-1
+sshcs_opt_use_shell=1
+```
 
 ## Building notes
 1. Modify the sources (features in `src`, and/or package building files)
