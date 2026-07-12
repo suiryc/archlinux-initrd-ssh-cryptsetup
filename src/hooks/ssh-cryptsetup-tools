@@ -33,6 +33,7 @@ sshcs_env_load() {
   local log_kmsg_default=1
   local debug_default=0
   local net_wol_default=g
+  local net_speed_default=10
   local timeout_ipconfig_default=10
   local timeout_poweroff_min=120
   local use_shell_default=0
@@ -43,6 +44,7 @@ sshcs_env_load() {
   [ -z "${sshcs_opt_log_kmsg}" ] && sshcs_opt_log_kmsg=${log_kmsg_default}
   [ -z "${sshcs_opt_debug}" ] && sshcs_opt_debug=${debug_default}
   [ -z "${sshcs_opt_net_wol}" ] && sshcs_opt_net_wol=${net_wol_default}
+  [ -z "${sshcs_opt_net_speed}" ] && sshcs_opt_net_speed=${net_speed_default}
   [ -z "${sshcs_opt_timeout_ipconfig}" ] && sshcs_opt_timeout_ipconfig=${timeout_ipconfig_default}
   [ -n "${sshcs_opt_listen}" ] && sshcs_opt_listen="-p ${sshcs_opt_listen}"
   [ -z "${sshcs_opt_timeout_poweroff}" ] && sshcs_opt_timeout_poweroff=${timeout_poweroff_min}
@@ -103,6 +105,12 @@ sshcs_cleanup() {
   # which is used to wakeup any other running unlocking script.
   # Thus as long as all devices have been unlocked, we don't expect any script
   # to be stuck on 'cryptsetup' calls.
+
+  # If we did change the network speed, time to reset it.
+  if [ -n "${net_device}" ] && [ ${sshcs_opt_net_speed} != 0 ]; then
+    log_dbg "Restoring network device=${net_device} speed"
+    ethtool -s "${net_device}" autoneg on
+  fi
 
   if proc_is_console; then
     # We are in the console.

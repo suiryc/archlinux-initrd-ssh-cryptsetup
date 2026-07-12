@@ -18,6 +18,8 @@ sshcs_net_start() {
     return 1
   }
 
+  # Note: ethtool can access WoL settings right now, but not other settings
+  # until the network is setup.
   if [ "${sshcs_opt_net_wol:-d}" != "d" ]; then
     log_dbg "Setting network device=${net_device} wol=${sshcs_opt_net_wol}"
     ethtool -s "${net_device}" wol "${sshcs_opt_net_wol}"
@@ -60,7 +62,15 @@ sshcs_net_start() {
 
   log_msg "IP-Config: device=${net_device} ip=${net_address}/${net_netmask} gw=${net_gateway} dns0=${net_dns0} dns1=${net_dns1}"
 
-  [ -n "${net_address}" ]
+  # Ensure we have an address
+  [ -n "${net_address}" ] || return 1
+
+  # Note: We cannot change the device settings, other than WoL, before the
+  # network is setup.
+  if [ ${sshcs_opt_net_speed} != 0 ]; then
+    log_dbg "Setting network device=${net_device} speed=${sshcs_opt_net_speed}"
+    ethtool -s "${net_device}" speed "${sshcs_opt_net_speed}" duplex full autoneg off
+  fi
 }
 
 sshcs_net_done() {

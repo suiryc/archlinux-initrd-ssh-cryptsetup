@@ -52,6 +52,12 @@ Some options can be set in `/etc/initcpio/sshcs_env` (file is sourced in initram
       - default: `g` (MagicPacket™)
       - usually WoL is disabled once in initramfs shell
       - set empty to not change network device WoL setting
+   * `sshcs_opt_net_speed`: speed to set on network device
+      - default: `10`
+      - full duplex is enabled, and auto-negociation disabled
+      - latest Arch/kernel tend to keep the speed at 1000M even during WoL
+      - this only applies to boot phase and persists for WoL: when unlocking devices, the network is reconfigured before the OS is fully ready
+      - set `0` to not change network device speed
    * `sshcs_opt_timeout_ipconfig`: time (in seconds) to configure IP
       - default: `10`
    * `sshcs_opt_listen`: SSH listening port
