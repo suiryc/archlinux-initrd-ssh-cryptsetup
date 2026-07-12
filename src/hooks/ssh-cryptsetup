@@ -98,7 +98,7 @@ sshcs_trap_timeout() {
 }
 
 sshcs_untrap_timeout() {
-  [ -z "${pid_timeout}" ] && return 0
+  [ -z "${pid_timeout:-}" ] && return 0
   # Notes:
   # If there was a running SSH shell, it may also try to kill it.
   # This only kills the spawned subshell, leaving the 'sleep' command still
@@ -118,7 +118,6 @@ sshcs_shell_run() {
 }
 
 sshcs_dropbear_run() {
-  local pid_timeout=
   local dev_pts_mounted=0
   local listen=
 
