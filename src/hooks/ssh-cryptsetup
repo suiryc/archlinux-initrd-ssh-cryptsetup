@@ -220,6 +220,7 @@ export HOME=/root
 
 echo ""
 echo "Call ${sshcs_cryptsetup_script} to try unlocking device(s)"
+echo "(available in shell history)"
 
 # Now give the user its shell
 /usr/bin/ash +m
