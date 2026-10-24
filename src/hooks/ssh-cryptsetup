@@ -317,6 +317,7 @@ EOF
 
 run_hook() {
   local etc_crypttab="/etc/crypttab"
+  local sshd_process_name="dropbear"
   local path_sshd_pid="/.sshd.pid"
   local sshcs_shell_script="/.sshcs_shell.sh"
   local net_env="/.sshcs_net_env.sh"

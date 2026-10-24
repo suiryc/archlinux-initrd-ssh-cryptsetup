@@ -85,7 +85,7 @@ proc_is_console() {
   if [ -z "${is_console:-}" ]; then
     # We are in console if we were not forked from dropbear.
     is_console=1
-    proc_find_parent_cmd $$ "dropbear" && is_console=0
+    proc_find_parent_cmd $$ "${sshd_process_name}" && is_console=0
   fi
 
   [ "${is_console}" -eq 1 ]
@@ -135,7 +135,7 @@ sshcs_cleanup() {
       pgrep_output=$(echo "${pgrep_output}" | grep -E -v "^(|1|$$)$")
       echo "${pgrep_output}" | while read pid; do
         proc_parse_stat ${pid} || continue
-        proc_find_parent_cmd ${pid} "dropbear" || continue
+        proc_find_parent_cmd ${pid} "${sshd_process_name}" || continue
         log_dbg "Killing SSH shell pid=${pid}"
         kill -SIGHUP ${pid}
       done
@@ -166,7 +166,7 @@ sshcs_cleanup() {
     pgrep_output=$(pgrep /usr/bin/ash)
     pgrep_output=$(echo "${pgrep_output}" | grep -E -v "^(|1|$$)$")
     echo "${pgrep_output}" | while read pid; do
-      proc_find_parent_cmd ${pid} "dropbear" && continue
+      proc_find_parent_cmd ${pid} "${sshd_process_name}" && continue
       log_dbg "Killing console shell pid=${pid}"
       kill -SIGHUP ${pid}
     done
