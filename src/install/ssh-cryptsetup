@@ -6,33 +6,11 @@ sshcs_check_nonempty() {
   [ -e "${filepath}" ] && grep -q -v '^\s*\(#\|$\)' "${filepath}"
 }
 
-sshcs_check_keys() {
-  local dropbear_keyfile
-  local openssh_keyfile
-  local fingerprint
-
-  for keytype in "${dropbear_key_types[@]}"; do
-    dropbear_keyfile=${dropbear_keyfile_prefix}${keytype}${dropbear_keyfile_suffix}
-    openssh_keyfile=${openssh_keyfile_prefix}${keytype}${openssh_keyfile_suffix}
-
-    # Prefer OpenSSH keys, or generate missing ones
-    if [ -e "${openssh_keyfile}" ]; then
-      #echo "Copying OpenSSH ${keytype} host key for dropbear ..."
-      dropbearconvert openssh dropbear "${openssh_keyfile}" "${dropbear_keyfile}" > /dev/null 2>&1
-    elif [ ! -e "${dropbear_keyfile}" ]; then
-      #echo "Generating ${keytype} host key for dropbear ..."
-      dropbearkey -t "${keytype}" -f "${dropbear_keyfile}" > /dev/null 2>&1
-    fi
-    fingerprint=$(dropbearkey -y -f "${dropbear_keyfile}" | sed -n '/^Fingerprint:/ {s/Fingerprint: *//; p}')
-    echo "$(basename "${dropbear_keyfile}") : ${fingerprint}"
-  done
-}
-
 build() {
   local etc_crypttab="/etc/crypttab"
   local dropbear_authorized_keys="/etc/dropbear/initrd.authorized_keys"
   local sshcs_env="/etc/initcpio/sshcs_env"
-  local dropbear_key_types=( "rsa" "ecdsa" "ed25519" )
+  local ssh_key_types=( "rsa" "ecdsa" "ed25519" )
   local dropbear_keyfile_prefix="/etc/dropbear/dropbear_"
   local dropbear_keyfile_suffix="_host_key"
   local openssh_keyfile_prefix="/etc/ssh/ssh_host_"
@@ -49,8 +27,6 @@ build() {
   fi
 
   umask 0022
-
-  sshcs_check_keys
 
   # Note: parts of this script (modules/binaries/files added) are the same than
   # other install scripts (/usr/lib/initcpio/install/):
@@ -88,7 +64,6 @@ build() {
   # (ours)
   # Note: dmsetup is necessary for device mapper features
   add_binary 'dmsetup'
-  add_binary 'dropbear'
   add_binary 'ip'
   add_binary 'ethtool'
 
@@ -108,16 +83,40 @@ build() {
   # in initramfs.
   add_file '/usr/lib/initcpio/hooks/ssh-cryptsetup-tools' '/usr/local/bin/ssh-cryptsetup-tools'
 
-  # SSH-related files
-  add_file "${dropbear_authorized_keys}" '/root/.ssh/authorized_keys'
-  for keytype in "${dropbear_key_types[@]}"; do
-    add_file "${dropbear_keyfile_prefix}${keytype}${dropbear_keyfile_suffix}"
-  done
-
   # crypt partitions
   add_file "${etc_crypttab}"
 
+  # SSH-related things
+  build_ssh
+
   add_runscript
+}
+
+build_ssh() {
+  add_binary 'dropbear'
+
+  add_file "${dropbear_authorized_keys}" '/root/.ssh/authorized_keys'
+
+  # Setup server keys.
+  local dropbear_keyfile
+  local openssh_keyfile
+  local fingerprint
+  for keytype in "${ssh_key_types[@]}"; do
+    dropbear_keyfile=${dropbear_keyfile_prefix}${keytype}${dropbear_keyfile_suffix}
+    openssh_keyfile=${openssh_keyfile_prefix}${keytype}${openssh_keyfile_suffix}
+
+    # Prefer OpenSSH keys, or generate missing ones
+    if [ -e "${openssh_keyfile}" ]; then
+      #echo "Copying OpenSSH ${keytype} host key for dropbear ..."
+      dropbearconvert openssh dropbear "${openssh_keyfile}" "${dropbear_keyfile}" > /dev/null 2>&1
+    elif [ ! -e "${dropbear_keyfile}" ]; then
+      #echo "Generating ${keytype} host key for dropbear ..."
+      dropbearkey -t "${keytype}" -f "${dropbear_keyfile}" > /dev/null 2>&1
+    fi
+    fingerprint=$(dropbearkey -y -f "${dropbear_keyfile}" | sed -n '/^Fingerprint:/ {s/Fingerprint: *//; p}')
+    echo "$(basename "${dropbear_keyfile}") : ${fingerprint}"
+    add_file "${dropbear_keyfile}"
+  done
 }
 
 help() {
