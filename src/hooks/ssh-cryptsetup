@@ -302,7 +302,7 @@ echo ""
 echo "Call ${sshcs_cryptsetup_script} to try unlocking device(s)"
 
 # Now give the user its shell
-/usr/bin/ash
+/usr/bin/ash +m
 
 # Check whether we are fully done
 sshcs_check_done 1
