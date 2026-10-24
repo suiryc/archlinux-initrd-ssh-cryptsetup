@@ -34,6 +34,7 @@ sshcs_env_load() {
   local debug_default=0
   local net_wol_default=g
   local net_speed_default=10
+  local ssh_daemon_default=dropbear
   local timeout_ipconfig_default=10
   local timeout_poweroff_min=120
   local use_shell_default=0
@@ -46,13 +47,24 @@ sshcs_env_load() {
   [ -z "${sshcs_opt_net_wol+d}" ] && sshcs_opt_net_wol=${net_wol_default}
   [ -z "${sshcs_opt_net_speed}" ] && sshcs_opt_net_speed=${net_speed_default}
   [ -z "${sshcs_opt_timeout_ipconfig}" ] && sshcs_opt_timeout_ipconfig=${timeout_ipconfig_default}
+  [ -z "${sshcs_opt_ssh_daemon}" ] && sshcs_opt_ssh_daemon=${ssh_daemon_default}
   [ -n "${sshcs_opt_listen}" ] && sshcs_opt_listen="-p ${sshcs_opt_listen}"
   [ -z "${sshcs_opt_timeout_poweroff}" ] && sshcs_opt_timeout_poweroff=${timeout_poweroff_min}
   [ -z "${sshcs_opt_use_shell}" ] && sshcs_opt_use_shell=${use_shell_default}
   [ ${sshcs_opt_timeout_poweroff} -ge 0 ] && [ ${sshcs_opt_timeout_poweroff} -lt ${timeout_poweroff_min} ] && sshcs_opt_timeout_poweroff=${timeout_poweroff_min}
 
   sshcs_cryptsetup_script="/.sshcs_cryptsetup_script.sh"
+
+  # Belt and suspenders: should have been checked during install.
+  if [ "${sshcs_opt_ssh_daemon}" != "dropbear" ] && [ "${sshcs_opt_ssh_daemon}" != "openssh" ]; then
+    log_err "Unknown SSH daemon, using dropbear: ${sshcs_opt_ssh_daemon}"
+    sshcs_opt_ssh_daemon="dropbear"
+  fi
+
   sshd_process_name="dropbear"
+  if [ "${sshcs_opt_ssh_daemon}" == "openssh" ]; then
+    sshd_process_name="sshd-session"
+  fi
 }
 
 proc_parse_stat() {

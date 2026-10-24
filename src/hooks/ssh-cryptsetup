@@ -68,7 +68,7 @@ sshcs_dropbear_run() {
     dev_pts_mounted=1
   fi
 
-  # /etc/passwd file for the root user
+  # Root user in /etc/passwd
   echo "root:x:0:0:root:/root:${sshcs_shell_script}" >> "/etc/passwd"
   echo "${sshcs_shell_script}" > "/etc/shells"
 
@@ -76,8 +76,13 @@ sshcs_dropbear_run() {
   [ ! -d "/var/log" ] && mkdir -p "/var/log"
   touch "/var/log/lastlog"
 
-  log_dbg "Starting dropbear ..."
-  dropbear -Esgjk -P "${path_sshd_pid}" ${sshcs_opt_listen}
+  if [ "${sshcs_opt_ssh_daemon}" == "openssh" ]; then
+    log_dbg "Starting sshd ..."
+    /usr/bin/sshd ${sshcs_opt_listen}
+  else
+    log_dbg "Starting dropbear ..."
+    dropbear -Esgjk -P "${path_sshd_pid}" ${sshcs_opt_listen}
+  fi
 
   # Actual unlocking shell
   sshcs_shell_run

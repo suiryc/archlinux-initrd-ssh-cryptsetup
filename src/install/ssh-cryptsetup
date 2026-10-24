@@ -93,9 +93,32 @@ build() {
 }
 
 build_ssh() {
-  add_binary 'dropbear'
-
   add_file "${sshcs_authorized_keys}" '/root/.ssh/authorized_keys'
+
+  local ssh_daemon_default=dropbear
+
+  [ -e "${sshcs_env}" ] && . "${sshcs_env}"
+  [ -z "${sshcs_opt_ssh_daemon}" ] && sshcs_opt_ssh_daemon=${ssh_daemon_default}
+
+  if [ "${sshcs_opt_ssh_daemon}" != "dropbear" ] && [ "${sshcs_opt_ssh_daemon}" != "openssh" ]; then
+    die "Unknown SSH daemon: ${sshcs_opt_ssh_daemon}"
+  fi
+
+  if [ "${sshcs_opt_ssh_daemon}" == "openssh" ]; then
+    build_ssh_openssh
+  else
+    build_ssh_dropbear
+  fi
+}
+
+build_ssh_dropbear() {
+  if ! pacman -Qi dropbear >/dev/null 2>&1; then
+    die "Package dropbear not installed"
+  fi
+
+  plain "Using dropbear SSH daemon"
+
+  add_binary 'dropbear'
 
   mkdir -p $(dirname "${BUILDROOT}/${dropbear_keyfile_prefix}")
 
@@ -125,6 +148,51 @@ build_ssh() {
   done
 }
 
+build_ssh_openssh() {
+  if ! pacman -Qi openssh >/dev/null 2>&1; then
+    die "Package openssh not installed"
+  fi
+
+  plain "Using openssh SSH daemon"
+
+  add_binary 'sshd'
+  add_binary '/usr/lib/ssh/sshd-session'
+  add_binary '/usr/lib/ssh/sshd-auth'
+
+  # OpenSSH requires the "nobody" user to be present.
+  grep "nobody" "/etc/passwd" > "${BUILDROOT}/etc/passwd"
+  grep "nobody" "/etc/group" > "${BUILDROOT}/etc/group"
+
+  mkdir -p ${BUILDROOT}/etc/ssh/
+  cat <<EOF >> "${BUILDROOT}/etc/ssh/sshd_config"
+PidFile                       /.sshd.pid
+SyslogFacility                AUTHPRIV
+PermitRootLogin               prohibit-password
+AuthorizedKeysFile            .ssh/authorized_keys
+KbdInteractiveAuthentication  no
+AuthenticationMethods         publickey
+UsePAM                        no
+DisableForwarding             yes
+EOF
+
+  # OpenSSH requires the "/usr/share/empty.sshd" folder to be present.
+  mkdir -p ${BUILDROOT}/usr/share/empty.sshd
+  chmod 711 ${BUILDROOT}/usr/share/empty.sshd
+
+  # Setup server keys.
+  local openssh_keyfile
+  for keytype in "${ssh_key_types[@]}"; do
+    openssh_keyfile=${openssh_keyfile_prefix}${keytype}${openssh_keyfile_suffix}
+    if [ -e "${openssh_keyfile}" ]; then
+      quiet "Copying OpenSSH ${keytype} host key ..."
+      add_file "${openssh_keyfile}"
+
+      fingerprint=$(ssh-keygen -lf "${openssh_keyfile}" | cut -d' ' -f2)
+      plain "$(basename "${openssh_keyfile}"): ${fingerprint}"
+    fi
+  done
+}
+
 help() {
   cat <<EOF
 This hook allows for LUKS encrypted devices to be unlocked either locally
@@ -137,9 +205,9 @@ be present.
 Some options can be set in '/etc/initcpio/sshcs_env'.
 See the README for more details.
 
-Each SSH server key ('dropbear_rsa_host_key', 'dropbear_ecdsa_host_key' and
-'dropbear_ed25519_host_key' in '/etc/dropbear' folder) is imported from OpenSSH
-if present or generated if missing. Fingerprints are displayed upon building
-the initramfs image.
+Each SSH server key ('rsa', 'ecdsa' and/or 'ed25519'; see README for locations)
+is copied from SSH daemon configuration directory, converted from OpenSSH if
+present, or generated if missing. Fingerprints are displayed upon building the
+initramfs image.
 EOF
 }

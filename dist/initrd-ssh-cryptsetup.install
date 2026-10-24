@@ -17,19 +17,28 @@ EOF
   chmod 600 "${sshcs_authorized_keys}"
 
   cat <<EOF
+    Install either 'dropbear' or 'openssh' package for SSH handling, and
+    configure it in '/etc/initcpio/sshcs_env' if necessary.
+
     Add the SSH public key to '${sshcs_authorized_keys}'.
+
     Add the 'ip=' kernel command parameter to the bootloader configuration
     (see https://wiki.archlinux.org/index.php/Mkinitcpio#Using_net).
+
     In the 'HOOKS' section of '/etc/mkinitcpio.conf', add 'ssh-cryptsetup'
-    before 'filesystems'. And rebuild the initramfs: 'mkinitcpio -p linux'
+    before 'filesystems'.
+
+    Then rebuild the initramfs: 'mkinitcpio -p linux'
 EOF
 }
 
 post_remove() {
   cat <<EOF
     Remove the 'ip=' kernel command parameter from the bootloader configuration.
+
     In the 'HOOKS' section of '/etc/mkinitcpio.conf', remove 'ssh-cryptsetup'.
-    And rebuild the initramfs: 'mkinitcpio -p linux'
+
+    Then rebuild the initramfs: 'mkinitcpio -p linux'
 EOF
 }
 

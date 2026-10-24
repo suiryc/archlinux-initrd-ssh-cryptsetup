@@ -15,7 +15,12 @@ To test local changes, set variable `LOCAL=1`:
 LOCAL=1 makepkg -Cfsric
 ```
 
-## Dropbear
+## SSH daemon
+Either `dropbear` or `openssh` can be used as SSH daemon.  
+The default is to use `dropbear`.  
+*initramfs* building will ensure the wanted one is present.
+
+### Dropbear
 A dedicated (default) configuration is used inside the *initramfs*.
 
 SSH server key(s) need to be generated for `dropbear`: `rsa`, `ecdsa`, and/or `ed25519`.  
@@ -40,6 +45,11 @@ If necessary an existing key file can be converted to `PEM` format using `ssh-ke
 ```bash
 ssh-keygen -A -p -m PEM -f /etc/ssh/ssh_host_ecdsa_key
 ```
+
+### OpenSSH
+A dedicated configuration is generated inside the *initramfs*.
+
+Nominal keys (from `/etc/ssh`) keys are copied.
 
 ## Configuration
 As explained upon installation, the following things need to be done:
@@ -74,6 +84,9 @@ Some options can be set in `/etc/initcpio/sshcs_env` (file is sourced in initram
       - set `0` to not change network device speed
    * `sshcs_opt_timeout_ipconfig`: time (in seconds) to configure IP
       - default: `10`
+   * `sshcs_opt_ssh_daemon`: SSH daemon
+      - default: `dropbear`
+      - possible values: `dropbear`, `openssh`
    * `sshcs_opt_listen`: SSH listening port
       - default: `22`
    * `sshcs_opt_timeout_poweroff`: time (in seconds) to unlock devices before automatic powering off
