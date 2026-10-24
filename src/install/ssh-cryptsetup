@@ -18,11 +18,11 @@ build() {
 
   # Check we are needed
   if ! sshcs_check_nonempty "${sshcs_authorized_keys}"; then
-    echo "There is no root key(s) in ${sshcs_authorized_keys}. Skipping."
+    plain "There is no root key(s) in ${sshcs_authorized_keys}. Skipping."
     return 0
   fi
   if ! sshcs_check_nonempty "${etc_crypttab}"; then
-    echo "There is no device in ${etc_crypttab}. Skipping."
+    plain "There is no device in ${etc_crypttab}. Skipping."
     return 0
   fi
 
@@ -111,17 +111,17 @@ build_ssh() {
     # Otherwise, prefer OpenSSH keys.
     # Or generate missing ones.
     if [ -e "${dropbear_keyfile}" ]; then
-      #echo "Copying Dropbear ${keytype} host key ..."
+      quiet "Copying Dropbear ${keytype} host key ..."
       add_file "${dropbear_keyfile}"
     elif [ -e "${openssh_keyfile}" ]; then
-      #echo "Converting OpenSSH ${keytype} host key for dropbear ..."
+      quiet "Converting OpenSSH ${keytype} host key for dropbear ..."
       dropbearconvert openssh dropbear "${openssh_keyfile}" "${BUILDROOT}/${dropbear_keyfile}" > /dev/null 2>&1
     elif [ ! -e "${dropbear_keyfile}" ]; then
-      #echo "Generating ${keytype} host key for dropbear ..."
+      quiet "Generating ${keytype} host key for dropbear ..."
       dropbearkey -t "${keytype}" -f "${BUILDROOT}/${dropbear_keyfile}" > /dev/null 2>&1
     fi
     fingerprint=$(dropbearkey -y -f "${BUILDROOT}/${dropbear_keyfile}" | sed -n '/^Fingerprint:/ {s/Fingerprint: *//; p}')
-    echo "$(basename "${dropbear_keyfile}") : ${fingerprint}"
+    plain "$(basename "${dropbear_keyfile}"): ${fingerprint}"
   done
 }
 

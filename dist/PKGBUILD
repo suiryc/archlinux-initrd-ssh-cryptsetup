@@ -24,7 +24,7 @@ prepare() {
     tar -xf "$srcdir/$src_tarball" -C "$srcdir/"
   else
     # Use local sources
-    echo "Copying local sources"
+    msg2 "Copying local sources"
     rsync -a --exclude='.git' --exclude='dist' "$startdir/../" "$srcdir/"
   fi
 }
