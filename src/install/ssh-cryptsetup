@@ -131,7 +131,7 @@ This hook allows for LUKS encrypted devices to be unlocked either locally
 (boot console) or remotely over SSH.
 
 Network is configured with 'ip=' kernel parameter (see 'mkinitcpio-nfs-utils').
-Authorized SSH key(s) must be present in '/etc/dropbear/initrd.authorized_keys'.
+Authorized SSH key(s) must be present in '/etc/initcpio/sshcs_authorized_keys'.
 LUKS encrypted devices to unlock are derived from '/etc/crypttab', which must
 be present.
 Some options can be set in '/etc/initcpio/sshcs_env'.
