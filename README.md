@@ -12,7 +12,7 @@ makepkg -sri
 
 To test local changes, set variable `LOCAL=1`:
 ```bash
-LOCAL=1 makepkg -fsri
+LOCAL=1 makepkg -Cfsric
 ```
 
 ## Dropbear
