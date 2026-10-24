@@ -149,7 +149,7 @@ sshcs_dropbear_run() {
   fi
 
   # /etc/passwd file for the root user
-  echo "root:x:0:0:root:/root:${sshcs_shell_script}" > "/etc/passwd"
+  echo "root:x:0:0:root:/root:${sshcs_shell_script}" >> "/etc/passwd"
   echo "${sshcs_shell_script}" > "/etc/shells"
 
   # SSH daemon requires /var/log/lastlog for tracking login information
