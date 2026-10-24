@@ -43,7 +43,7 @@ sshcs_env_load() {
   sshcs_env_loaded=1
   [ -z "${sshcs_opt_log_kmsg}" ] && sshcs_opt_log_kmsg=${log_kmsg_default}
   [ -z "${sshcs_opt_debug}" ] && sshcs_opt_debug=${debug_default}
-  [ -z "${sshcs_opt_net_wol}" ] && sshcs_opt_net_wol=${net_wol_default}
+  [ -z "${sshcs_opt_net_wol+d}" ] && sshcs_opt_net_wol=${net_wol_default}
   [ -z "${sshcs_opt_net_speed}" ] && sshcs_opt_net_speed=${net_speed_default}
   [ -z "${sshcs_opt_timeout_ipconfig}" ] && sshcs_opt_timeout_ipconfig=${timeout_ipconfig_default}
   [ -n "${sshcs_opt_listen}" ] && sshcs_opt_listen="-p ${sshcs_opt_listen}"

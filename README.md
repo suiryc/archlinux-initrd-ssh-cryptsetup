@@ -51,7 +51,7 @@ Some options can be set in `/etc/initcpio/sshcs_env` (file is sourced in initram
    * `sshcs_opt_net_wol`: Wake-on-LAN option to set on network device
       - default: `g` (MagicPacket™)
       - usually WoL is disabled once in initramfs shell
-      - set empty to not change network device WoL setting
+      - set empty, or `d` (disabled), to not change network device WoL setting
    * `sshcs_opt_net_speed`: speed to set on network device
       - default: `10`
       - full duplex is enabled, and auto-negociation disabled
