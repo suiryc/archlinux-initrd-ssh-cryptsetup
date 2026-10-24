@@ -3,6 +3,8 @@ The code was reworked from legacy dropbear_initrd_encrypt AUR package.
 
 
 ## Installation
+Build files are in the `dist` subfolder.
+
 After cloning the repo, installation is done as for an AUR package, e.g.:
 ```bash
 makepkg -sri
