@@ -97,6 +97,8 @@ build_ssh() {
 
   add_file "${sshcs_authorized_keys}" '/root/.ssh/authorized_keys'
 
+  mkdir -p $(dirname "${BUILDROOT}/${dropbear_keyfile_prefix}")
+
   # Setup server keys.
   local dropbear_keyfile
   local openssh_keyfile
@@ -105,17 +107,21 @@ build_ssh() {
     dropbear_keyfile=${dropbear_keyfile_prefix}${keytype}${dropbear_keyfile_suffix}
     openssh_keyfile=${openssh_keyfile_prefix}${keytype}${openssh_keyfile_suffix}
 
-    # Prefer OpenSSH keys, or generate missing ones
-    if [ -e "${openssh_keyfile}" ]; then
-      #echo "Copying OpenSSH ${keytype} host key for dropbear ..."
-      dropbearconvert openssh dropbear "${openssh_keyfile}" "${dropbear_keyfile}" > /dev/null 2>&1
+    # Use existing dropbear keys if any.
+    # Otherwise, prefer OpenSSH keys.
+    # Or generate missing ones.
+    if [ -e "${dropbear_keyfile}" ]; then
+      #echo "Copying Dropbear ${keytype} host key ..."
+      add_file "${dropbear_keyfile}"
+    elif [ -e "${openssh_keyfile}" ]; then
+      #echo "Converting OpenSSH ${keytype} host key for dropbear ..."
+      dropbearconvert openssh dropbear "${openssh_keyfile}" "${BUILDROOT}/${dropbear_keyfile}" > /dev/null 2>&1
     elif [ ! -e "${dropbear_keyfile}" ]; then
       #echo "Generating ${keytype} host key for dropbear ..."
-      dropbearkey -t "${keytype}" -f "${dropbear_keyfile}" > /dev/null 2>&1
+      dropbearkey -t "${keytype}" -f "${BUILDROOT}/${dropbear_keyfile}" > /dev/null 2>&1
     fi
-    fingerprint=$(dropbearkey -y -f "${dropbear_keyfile}" | sed -n '/^Fingerprint:/ {s/Fingerprint: *//; p}')
+    fingerprint=$(dropbearkey -y -f "${BUILDROOT}/${dropbear_keyfile}" | sed -n '/^Fingerprint:/ {s/Fingerprint: *//; p}')
     echo "$(basename "${dropbear_keyfile}") : ${fingerprint}"
-    add_file "${dropbear_keyfile}"
   done
 }
 

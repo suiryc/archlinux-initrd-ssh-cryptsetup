@@ -16,8 +16,15 @@ LOCAL=1 makepkg -Cfsric
 ```
 
 ## Dropbear
-SSH server key need to be generated for `dropbear`.  
-Either a new key can be generated with `dropbearkey`, e.g.:
+A dedicated (default) configuration is used inside the *initramfs*.
+
+SSH server key(s) need to be generated for `dropbear`: `rsa`, `ecdsa`, and/or `ed25519`.  
+Installation will, in order of preference:
+- copy existing Dropbear keys (from `/etc/dropbear`)
+- convert existing OpenSSH keys (from `/etc/ssh`)
+- generate new ones in `/etc/dropbear`, and copy them
+
+If needed, a new key can be generated with `dropbearkey`, e.g.:
 ```bash
 dropbearkey -t ecdsa -f /etc/dropbear/dropbear_ecdsa_host_key
 ```
