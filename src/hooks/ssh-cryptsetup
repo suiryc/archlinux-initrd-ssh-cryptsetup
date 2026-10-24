@@ -157,7 +157,7 @@ sshcs_dropbear_run() {
   touch "/var/log/lastlog"
 
   log_dbg "Starting dropbear ..."
-  dropbear -Esgjk -P "${path_dropbear_pid}" ${sshcs_opt_listen}
+  dropbear -Esgjk -P "${path_sshd_pid}" ${sshcs_opt_listen}
 
   # Actual unlocking shell
   sshcs_shell_run
@@ -317,7 +317,7 @@ EOF
 
 run_hook() {
   local etc_crypttab="/etc/crypttab"
-  local path_dropbear_pid="/.dropbear.pid"
+  local path_sshd_pid="/.sshd.pid"
   local sshcs_shell_script="/.sshcs_shell.sh"
   local net_env="/.sshcs_net_env.sh"
   local line net_device

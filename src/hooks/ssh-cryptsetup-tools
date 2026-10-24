@@ -118,11 +118,11 @@ sshcs_cleanup() {
     # When using a shell - instead of directly calling the unlocking script -
     # we also need to signal any SSH shell so that it is properly cleaned too.
 
-    # cleanup dropbear
-    if [ -f "${path_dropbear_pid}" ]; then
-      log_dbg "Stopping dropbear ..."
-      kill $(cat "${path_dropbear_pid}")
-      rm -f "${path_dropbear_pid}"
+    # cleanup SSH daemon
+    if [ -f "${path_sshd_pid}" ]; then
+      log_dbg "Stopping SSH daemon ..."
+      kill $(cat "${path_sshd_pid}")
+      rm -f "${path_sshd_pid}"
     fi
 
     if [ ${sshcs_opt_use_shell} -eq 1 ]; then
