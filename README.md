@@ -87,13 +87,15 @@ sshcs_opt_use_shell=1
 
 ## Building notes
 1. Modify the sources (features in `src`, and/or package building files)
-2. If `src` was modified
+2. If sources were modified
    * bump `pkgver`, or `pkgrel`, in `PKGBUILD`
-   * archive the `src` folder in `$pkgname-$pkgver-$pkgrel.tar.xz` file; e.g.: `tar -cJf initrd-ssh-cryptsetup-$(grep "^pkgver=" PKGBUILD | cut -d'=' -f2)-$(grep "^pkgrel=" PKGBUILD | cut -d'=' -f2).tar.xz src`
+   * archive the sources folder in `$pkgname-$pkgver-$pkgrel.tar.xz` file
+     * e.g.: `tar -cJf initrd-ssh-cryptsetup-$(grep "^pkgver=" PKGBUILD | cut -d'=' -f2)-$(grep "^pkgrel=" PKGBUILD | cut -d'=' -f2).tar.xz src`
    * upload the archive on the online repository (pointed by `PKGBUILD`)
 3. Update ChangeLog
 4. Update `PKGBUILD`
    * bump `pkgrel` if only building files were modified
    * refresh `sha256sums` with `updpkgsums` if necessary
      - or manually, based on `sha256sum initrd-ssh-cryptsetup-*.tar.xz initrd-ssh-cryptsetup.install` output
-5. Delete generated archive file if any
+5. Upload changes and tag the repository to match the package release: `$pkgver-$pkgrel`
+6. Delete generated archive file if any
