@@ -92,6 +92,88 @@ proc_is_console() {
   [ "${is_console}" -eq 1 ]
 }
 
+sshcs_net_start() {
+  local iparg net_address ipconfig_out net_netmask net_gateway net_dns0 net_dns1
+
+  # we must have an 'ip' setting, and a device in it
+  [ -z "${ip}" ] && [ -n "${nfsaddrs}" ] && ip="${nfsaddrs}"
+  [ -z "${ip}" ] && {
+    log_dbg "No ip setting to setup network"
+    return 1
+  }
+
+  net_device=$(echo ${ip} | cut -d: -f6)
+  [ -z "${net_device}" ] && {
+    log_dbg "No network device to setup"
+    return 1
+  }
+
+  # Note: ethtool can access WoL settings right now, but not other settings
+  # until the network is setup.
+  if [ "${sshcs_opt_net_wol:-d}" != "d" ]; then
+    log_dbg "Setting network device=${net_device} wol=${sshcs_opt_net_wol}"
+    ethtool -s "${net_device}" wol "${sshcs_opt_net_wol}"
+  fi
+
+  # Setup network and save some values
+  # Note: some useful redirection means ('< <(...)' and '<<< "$(...)"') are
+  # not supported in the available shell. So we have to write code in a
+  # temporary file and 'source' it since '... | while read ...' spawns a
+  # subshell from which outer variables cannot be altered.
+  : > "${net_env}"
+
+  echo ""
+  echo "Configuring IP (timeout = ${sshcs_opt_timeout_ipconfig}s) ..."
+  # ipconfig manual: https://git.kernel.org/pub/scm/libs/klibc/klibc.git/tree/usr/kinit/ipconfig/README.ipconfig
+  ipconfig_out=$(ipconfig -t "${sshcs_opt_timeout_ipconfig}" "ip=${ip}")
+  if [ $? -ne 0 ]; then
+    log_err "IP configuration timeout!"
+    echo "Devices probing:"
+    ipconfig -n -t 5 -c none all
+    return 1
+  fi
+
+  echo -n "${ipconfig_out}" | while read line; do
+    [ "${line#"IP-Config:"}" != "${line}" ] && continue
+
+    line="$(echo "${line}" | sed -e 's/ :/:/g;s/: /=/g')"
+
+    for iparg in ${line}; do
+      case "${iparg}" in
+        address=*|netmask=*|gateway=*|dns0=*|dns1=*)
+          echo "net_${iparg}" >> "${net_env}"
+          ;;
+      esac
+    done
+  done
+
+  . "${net_env}"
+  rm -f "${net_env}"
+
+  log_msg "IP-Config: device=${net_device} ip=${net_address}/${net_netmask} gw=${net_gateway} dns0=${net_dns0} dns1=${net_dns1}"
+
+  # Ensure we have an address
+  [ -n "${net_address}" ] || return 1
+
+  # Note: We cannot change the device settings, other than WoL, before the
+  # network is setup.
+  if [ ${sshcs_opt_net_speed} != 0 ]; then
+    log_dbg "Setting network device=${net_device} speed=${sshcs_opt_net_speed}"
+    ethtool -s "${net_device}" speed "${sshcs_opt_net_speed}" duplex full autoneg off
+  fi
+}
+
+sshcs_net_done() {
+  # We are done with the network.
+  # Note: "net_device" is known in console, not in SSH session, so that only
+  # the former does the network cleanup.
+  if [ -n "${net_device}" ]; then
+    log_dbg "Setting network device=${net_device} down"
+    ip addr flush dev "${net_device}"
+    ip link set dev "${net_device}" down
+  fi
+}
+
 sshcs_cleanup() {
   local pgrep_output
 
