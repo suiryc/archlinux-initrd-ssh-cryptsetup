@@ -36,7 +36,7 @@ ssh-keygen -A -p -m PEM -f /etc/ssh/ssh_host_ecdsa_key
 
 ## Configuration
 As explained upon installation, the following things need to be done:
-   * add the authorized SSH public key to `/etc/dropbear/initrd.authorized_keys`
+   * add the authorized SSH public key to `/etc/initcpio/sshcs_authorized_keys`
    * add the `ip=` kernel command parameter to the bootloader configuration (see https://wiki.archlinux.org/index.php/Mkinitcpio#Using_net)
       - e.g. with `grub`: add `ip=:::::eth0:dhcp` to `GRUB_CMDLINE_LINUX_DEFAULT` in `/etc/default/grub`, and re-generate the configuration with `grub-mkconfig -o /boot/grub/grub.cfg`
       - also see https://git.kernel.org/pub/scm/libs/klibc/klibc.git/tree/usr/kinit/ipconfig/README.ipconfig

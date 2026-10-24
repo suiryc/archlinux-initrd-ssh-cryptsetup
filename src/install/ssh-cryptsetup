@@ -8,7 +8,7 @@ sshcs_check_nonempty() {
 
 build() {
   local etc_crypttab="/etc/crypttab"
-  local dropbear_authorized_keys="/etc/dropbear/initrd.authorized_keys"
+  local sshcs_authorized_keys="/etc/initcpio/sshcs_authorized_keys"
   local sshcs_env="/etc/initcpio/sshcs_env"
   local ssh_key_types=( "rsa" "ecdsa" "ed25519" )
   local dropbear_keyfile_prefix="/etc/dropbear/dropbear_"
@@ -17,8 +17,8 @@ build() {
   local openssh_keyfile_suffix="_key"
 
   # Check we are needed
-  if ! sshcs_check_nonempty "${dropbear_authorized_keys}"; then
-    echo "There is no root key(s) in ${dropbear_authorized_keys}. Skipping."
+  if ! sshcs_check_nonempty "${sshcs_authorized_keys}"; then
+    echo "There is no root key(s) in ${sshcs_authorized_keys}. Skipping."
     return 0
   fi
   if ! sshcs_check_nonempty "${etc_crypttab}"; then
@@ -95,7 +95,7 @@ build() {
 build_ssh() {
   add_binary 'dropbear'
 
-  add_file "${dropbear_authorized_keys}" '/root/.ssh/authorized_keys'
+  add_file "${sshcs_authorized_keys}" '/root/.ssh/authorized_keys'
 
   # Setup server keys.
   local dropbear_keyfile
