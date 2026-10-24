@@ -10,6 +10,11 @@ After cloning the repo, installation is done as for an AUR package, e.g.:
 makepkg -sri
 ```
 
+To test local changes, set variable `LOCAL=1`:
+```bash
+LOCAL=1 makepkg -fsri
+```
+
 ## Dropbear
 SSH server key need to be generated for `dropbear`.  
 Either a new key can be generated with `dropbearkey`, e.g.:

@@ -7,15 +7,30 @@ arch=('any')
 url="https://github.com/suiryc/archlinux-$pkgname"
 license=('GPL3')
 depends=('dropbear' 'cryptsetup' 'mkinitcpio-nfs-utils' 'iproute2' 'ethtool')
+makedepends=('rsync')
 install=$pkgname.install
 changelog='ChangeLog'
-source=("http://julien.coloos.free.fr/archlinux/$pkgname-$pkgver-$pkgrel.tar.xz" "$pkgname.install")
+# Do not extract archive: we do it conditionally.
+src_tarball="$pkgname-$pkgver-$pkgrel.tar.xz"
+noextract=("$src_tarball")
+source=("http://julien.coloos.free.fr/archlinux/$src_tarball"
+        "$pkgname.install")
 sha256sums=('94156250bfc04490801d8575192a787363cf4637ade2473147d3f63924c5f814'
             'b84978b3c2ef32208c2b104ee2d3ce8aaec26da0bd4e9e1c83942f373bbf6285')
+
+prepare() {
+  if [ ${LOCAL:-0} -eq 0 ]; then
+    # Use archived sources
+    tar -xf "$srcdir/$src_tarball" -C "$srcdir/"
+  else
+    # Use local sources
+    echo "Copying local sources"
+    rsync -a --exclude='.git' --exclude='dist' "$startdir/../" "$srcdir/"
+  fi
+}
 
 package() {
   install -Dm644 "$srcdir/src/install/ssh-cryptsetup"     "$pkgdir/usr/lib/initcpio/install/ssh-cryptsetup"
   install -Dm644 "$srcdir/src/hooks/ssh-cryptsetup"       "$pkgdir/usr/lib/initcpio/hooks/ssh-cryptsetup"
   install -Dm644 "$srcdir/src/hooks/ssh-cryptsetup-tools" "$pkgdir/usr/lib/initcpio/hooks/ssh-cryptsetup-tools"
 }
-
