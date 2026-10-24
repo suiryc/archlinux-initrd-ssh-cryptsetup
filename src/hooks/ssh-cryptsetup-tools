@@ -52,6 +52,7 @@ sshcs_env_load() {
   [ ${sshcs_opt_timeout_poweroff} -ge 0 ] && [ ${sshcs_opt_timeout_poweroff} -lt ${timeout_poweroff_min} ] && sshcs_opt_timeout_poweroff=${timeout_poweroff_min}
 
   sshcs_cryptsetup_script="/.sshcs_cryptsetup_script.sh"
+  sshd_process_name="dropbear"
 }
 
 proc_parse_stat() {
@@ -107,6 +108,8 @@ sshcs_cleanup() {
   # to be stuck on 'cryptsetup' calls.
 
   # If we did change the network speed, time to reset it.
+  # Note: "net_device" is known in console, not in SSH session, so that only
+  # the former does the network cleanup.
   if [ -n "${net_device}" ] && [ ${sshcs_opt_net_speed} != 0 ]; then
     log_dbg "Restoring network device=${net_device} speed"
     ethtool -s "${net_device}" autoneg on

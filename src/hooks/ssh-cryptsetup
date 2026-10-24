@@ -74,7 +74,9 @@ sshcs_net_start() {
 }
 
 sshcs_net_done() {
-  # we are done with the network
+  # We are done with the network.
+  # Note: "net_device" is known in console, not in SSH session, so that only
+  # the former does the network cleanup.
   if [ -n "${net_device}" ]; then
     log_dbg "Setting network device=${net_device} down"
     ip addr flush dev "${net_device}"
@@ -317,7 +319,6 @@ EOF
 
 run_hook() {
   local etc_crypttab="/etc/crypttab"
-  local sshd_process_name="dropbear"
   local path_sshd_pid="/.sshd.pid"
   local sshcs_shell_script="/.sshcs_shell.sh"
   local net_env="/.sshcs_net_env.sh"
