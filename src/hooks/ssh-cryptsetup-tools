@@ -143,6 +143,7 @@ sshcs_cleanup() {
 
     # cleanup /dev/pts if necessary
     if [ ${dev_pts_mounted:-0} -ne 0 ]; then
+      log_dbg "Unmounting /dev/pts"
       umount "/dev/pts"
       rm -R "/dev/pts"
     fi

@@ -142,6 +142,7 @@ sshcs_dropbear_run() {
 
   # ensure /dev/pts is present
   if [ ! -d "/dev/pts" ]; then
+    log_dbg "Mounting /dev/pts"
     mkdir -p "/dev/pts"
     mount -t devpts devpts "/dev/pts"
     dev_pts_mounted=1
@@ -151,6 +152,7 @@ sshcs_dropbear_run() {
   echo "root:x:0:0:root:/root:${sshcs_shell_script}" > "/etc/passwd"
   echo "${sshcs_shell_script}" > "/etc/shells"
 
+  # SSH daemon requires /var/log/lastlog for tracking login information
   [ ! -d "/var/log" ] && mkdir -p "/var/log"
   touch "/var/log/lastlog"
 
