@@ -295,6 +295,9 @@ EOF
 
 . "/usr/local/bin/ssh-cryptsetup-tools"
 
+# HOME is / by default otherwise
+export HOME=/root
+
 echo ""
 echo "Call ${sshcs_cryptsetup_script} to try unlocking device(s)"
 
@@ -305,6 +308,10 @@ echo "Call ${sshcs_cryptsetup_script} to try unlocking device(s)"
 sshcs_check_done 1
 EOF
     chmod a+x "${sshcs_shell_script}"
+
+    # Add command to unlock disks in shell history for easier use
+    echo ${sshcs_cryptsetup_script} >> "/root/.ash_history"
+    chmod 600 "/root/.ash_history"
   fi
 }
 
