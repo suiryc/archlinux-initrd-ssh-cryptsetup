@@ -66,7 +66,7 @@ proc_parse_stat() {
 }
 
 proc_find_parent_cmd() {
-  pid=$1
+  local pid=$1
   proc_parse_stat ${pid} || return 1
   while [ ${ppid} -gt 1 ]
   do
