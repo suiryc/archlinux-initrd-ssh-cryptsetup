@@ -48,6 +48,7 @@ sshcs_env_load() {
   [ -z "${sshcs_opt_net_speed}" ] && sshcs_opt_net_speed=${net_speed_default}
   [ -z "${sshcs_opt_timeout_ipconfig}" ] && sshcs_opt_timeout_ipconfig=${timeout_ipconfig_default}
   [ -z "${sshcs_opt_ssh_daemon}" ] && sshcs_opt_ssh_daemon=${ssh_daemon_default}
+  sshcs_opt_port=${sshcs_opt_listen:-22}
   [ -n "${sshcs_opt_listen}" ] && sshcs_opt_listen="-p ${sshcs_opt_listen}"
   [ -z "${sshcs_opt_timeout_poweroff}" ] && sshcs_opt_timeout_poweroff=${timeout_poweroff_min}
   [ -z "${sshcs_opt_use_shell}" ] && sshcs_opt_use_shell=${use_shell_default}
@@ -56,7 +57,7 @@ sshcs_env_load() {
   sshcs_cryptsetup_script="/.sshcs_cryptsetup_script.sh"
 
   # Belt and suspenders: should have been checked during install.
-  if [ "${sshcs_opt_ssh_daemon}" != "dropbear" ] && [ "${sshcs_opt_ssh_daemon}" != "openssh" ]; then
+  if [ "${sshcs_opt_ssh_daemon}" != "dropbear" ] && [ "${sshcs_opt_ssh_daemon}" != "openssh" ] && [ "${sshcs_opt_ssh_daemon}" != "tinyssh" ]; then
     log_err "Unknown SSH daemon, using dropbear: ${sshcs_opt_ssh_daemon}"
     sshcs_opt_ssh_daemon="dropbear"
   fi
@@ -64,6 +65,8 @@ sshcs_env_load() {
   sshd_process_name="dropbear"
   if [ "${sshcs_opt_ssh_daemon}" == "openssh" ]; then
     sshd_process_name="sshd-session"
+  elif [ "${sshcs_opt_ssh_daemon}" == "tinyssh" ]; then
+    sshd_process_name="tinysshd"
   fi
 }
 

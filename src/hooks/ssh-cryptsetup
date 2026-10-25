@@ -79,6 +79,14 @@ sshcs_dropbear_run() {
   if [ "${sshcs_opt_ssh_daemon}" == "openssh" ]; then
     log_dbg "Starting sshd ..."
     /usr/bin/sshd ${sshcs_opt_listen}
+  elif [ "${sshcs_opt_ssh_daemon}" == "tinyssh" ]; then
+    log_dbg "Starting tinyssh ..."
+    # Note: tcpsvd hijacks stdin/stdout/stderr, which messes up cryptsetup trying
+    # to read the passphrase from the terminal if at least one SSH connection does
+    # happen.
+    # We need to redirect all these fds to fix this issue.
+    busybox tcpsvd 0 ${sshcs_opt_port} tinysshd -l /etc/tinyssh/sshkeydir </dev/null >/dev/null 2>&1 &
+    echo -n "$!" > "${path_sshd_pid}"
   else
     log_dbg "Starting dropbear ..."
     dropbear -Esgjk -P "${path_sshd_pid}" ${sshcs_opt_listen}

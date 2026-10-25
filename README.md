@@ -16,9 +16,13 @@ LOCAL=1 makepkg -Cfsric
 ```
 
 ## SSH daemon
-Either `dropbear` or `openssh` can be used as SSH daemon.  
+Either `dropbear`, `openssh` or `tinyssh` can be used as SSH daemon.  
 The default is to use `dropbear`.  
 *initramfs* building will ensure the wanted one is present.
+
+> [!warning]
+> The SSH server keys will be present unprotected in *initramfs*.  
+> For security reasons, dedicated keys should be generated and used if the nominal ones - used after boot - are protected (e.g. stored on an encrypted disk).
 
 ### Dropbear
 A dedicated (default) configuration is used inside the *initramfs*.
@@ -50,6 +54,17 @@ ssh-keygen -A -p -m PEM -f /etc/ssh/ssh_host_ecdsa_key
 A dedicated configuration is generated inside the *initramfs*.
 
 Nominal keys (from `/etc/ssh`) keys are copied.
+
+### TinySSH
+Native keys (from `/etc/tinyssh/sshkeydir`) are copied if present.  
+Otherwise, OpenSSH `/etc/ssh/ssh_host_ed25519_key` key is converted if present.
+
+An existing OpenSSH key can be converted with `tinyssh-convert`:
+```bash
+tinyssh-convert "/etc/tinyssh/sshkeydir" < "/etc/ssh/ssh_host_ed25519_key"
+```
+
+There must be at least one *ed25519* authorized key.
 
 ## Configuration
 As explained upon installation, the following things need to be done:

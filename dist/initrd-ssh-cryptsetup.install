@@ -17,10 +17,13 @@ EOF
   chmod 600 "${sshcs_authorized_keys}"
 
   cat <<EOF
-    Install either 'dropbear' or 'openssh' package for SSH handling, and
-    configure it in '/etc/initcpio/sshcs_env' if necessary.
+    Install either 'dropbear', 'openssh' or 'tinyssh' package for SSH handling,
+    and configure it in '/etc/initcpio/sshcs_env' if necessary.
 
-    Add the SSH public key to '${sshcs_authorized_keys}'.
+    Generate dedicated server keys if nominal (after boot) ones are protected
+    (e.g. on an encrypted disk).
+
+    Add the SSH client public key to '${sshcs_authorized_keys}'.
 
     Add the 'ip=' kernel command parameter to the bootloader configuration
     (see https://wiki.archlinux.org/index.php/Mkinitcpio#Using_net).

@@ -7,7 +7,7 @@ arch=('any')
 url="https://github.com/suiryc/archlinux-$pkgname"
 license=('GPL3')
 depends=('cryptsetup' 'mkinitcpio-nfs-utils' 'iproute2' 'ethtool')
-optdepends=('dropbear' 'openssh')
+optdepends=('dropbear' 'openssh' 'tinyssh')
 makedepends=('rsync')
 install=$pkgname.install
 changelog='ChangeLog'
@@ -17,7 +17,7 @@ noextract=("$src_tarball")
 source=("http://julien.coloos.free.fr/archlinux/$src_tarball"
         "$pkgname.install")
 sha256sums=('94156250bfc04490801d8575192a787363cf4637ade2473147d3f63924c5f814'
-            'e6a2331a92caf99f0c25338cbf8fee5860f67002b524f685a194599aff882bbc')
+            '8bfbc02c4bcb61d3fb95361267a4c083142f570782166a58c11dfbaac478c3c4')
 
 prepare() {
   if [ ${LOCAL:-0} -eq 0 ]; then

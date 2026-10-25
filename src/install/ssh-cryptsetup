@@ -15,6 +15,7 @@ build() {
   local dropbear_keyfile_suffix="_host_key"
   local openssh_keyfile_prefix="/etc/ssh/ssh_host_"
   local openssh_keyfile_suffix="_key"
+  local root_authorized_keys="/root/.ssh/authorized_keys"
 
   # Check we are needed
   if ! sshcs_check_nonempty "${sshcs_authorized_keys}"; then
@@ -93,19 +94,21 @@ build() {
 }
 
 build_ssh() {
-  add_file "${sshcs_authorized_keys}" '/root/.ssh/authorized_keys'
+  add_file "${sshcs_authorized_keys}" "${root_authorized_keys}"
 
   local ssh_daemon_default=dropbear
 
   [ -e "${sshcs_env}" ] && . "${sshcs_env}"
   [ -z "${sshcs_opt_ssh_daemon}" ] && sshcs_opt_ssh_daemon=${ssh_daemon_default}
 
-  if [ "${sshcs_opt_ssh_daemon}" != "dropbear" ] && [ "${sshcs_opt_ssh_daemon}" != "openssh" ]; then
+  if [ "${sshcs_opt_ssh_daemon}" != "dropbear" ] && [ "${sshcs_opt_ssh_daemon}" != "openssh" ] && [ "${sshcs_opt_ssh_daemon}" != "tinyssh" ]; then
     die "Unknown SSH daemon: ${sshcs_opt_ssh_daemon}"
   fi
 
   if [ "${sshcs_opt_ssh_daemon}" == "openssh" ]; then
     build_ssh_openssh
+  elif [ "${sshcs_opt_ssh_daemon}" == "tinyssh" ]; then
+    build_ssh_tinyssh
   else
     build_ssh_dropbear
   fi
@@ -146,6 +149,40 @@ build_ssh_dropbear() {
     fingerprint=$(dropbearkey -y -f "${BUILDROOT}/${dropbear_keyfile}" | sed -n '/^Fingerprint:/ {s/Fingerprint: *//; p}')
     plain "$(basename "${dropbear_keyfile}"): ${fingerprint}"
   done
+}
+
+build_ssh_tinyssh() {
+  if ! pacman -Qi tinyssh >/dev/null 2>&1; then
+    die "Package tinyssh not installed"
+  fi
+
+  plain "Using tinyssh SSH daemon"
+
+  add_binary 'tinysshd'
+
+  # Ensure authorized key is ed25519
+  grep '^ssh-ed25519 ' "${sshcs_authorized_keys}" > "${BUILDROOT}/${root_authorized_keys}"
+  if [ ! -s "${BUILDROOT}/${root_authorized_keys}" ]; then
+    die "Missing ed25519 authorized key"
+  fi
+
+  # Setup server key.
+  local tinyssh_keydir="/etc/tinyssh/sshkeydir"
+  local openssh_keyfile="/etc/ssh/ssh_host_ed25519_key"
+  mkdir -p $(dirname "${BUILDROOT}/${tinyssh_keydir}")
+  if [ -e "${tinyssh_keydir}/ed25519.pk" ] && [ -e "${tinyssh_keydir}/.ed25519.sk" ]; then
+    quiet "Copying tinyssh ed25519 host key ..."
+    add_file "${tinyssh_keydir}/ed25519.pk" "${tinyssh_keydir}/ed25519.pk"
+    add_file "${tinyssh_keydir}/.ed25519.sk" "${tinyssh_keydir}/.ed25519.sk"
+  elif [ -e "${openssh_keyfile}" ]; then
+    quiet "Converting OpenSSH ed25519 host key for tinyssh ..."
+    tinyssh-convert "${BUILDROOT}/${tinyssh_keydir}" < "${openssh_keyfile}"
+  else
+    die "Missing ed25519 key file"
+  fi
+
+  fingerprint=$(tinysshd-printkey "${BUILDROOT}/${tinyssh_keydir}" | ssh-keygen -lf - | cut -d' ' -f2)
+  plain ".ed25519.sk: ${fingerprint}"
 }
 
 build_ssh_openssh() {
