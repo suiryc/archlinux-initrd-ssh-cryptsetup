@@ -33,5 +33,6 @@ prepare() {
 package() {
   install -Dm644 "$srcdir/src/install/ssh-cryptsetup"     "$pkgdir/usr/lib/initcpio/install/ssh-cryptsetup"
   install -Dm644 "$srcdir/src/hooks/ssh-cryptsetup"       "$pkgdir/usr/lib/initcpio/hooks/ssh-cryptsetup"
+  install -Dm644 "$srcdir/src/hooks/ssh-cryptsetup-env"   "$pkgdir/usr/lib/initcpio/hooks/ssh-cryptsetup-env"
   install -Dm644 "$srcdir/src/hooks/ssh-cryptsetup-tools" "$pkgdir/usr/lib/initcpio/hooks/ssh-cryptsetup-tools"
 }

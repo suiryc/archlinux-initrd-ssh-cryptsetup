@@ -7,9 +7,10 @@ sshcs_check_nonempty() {
 }
 
 build() {
+  . /usr/lib/initcpio/hooks/ssh-cryptsetup-env
+
   local etc_crypttab='/etc/crypttab'
   local sshcs_authorized_keys='/etc/initcpio/sshcs_authorized_keys'
-  local sshcs_env='/etc/initcpio/sshcs_env'
   local ssh_key_types=( 'rsa' 'ecdsa' 'ed25519' )
   local dropbear_keyfile_prefix='/etc/dropbear/dropbear_'
   local dropbear_keyfile_suffix='_host_key'
@@ -82,6 +83,7 @@ build() {
   [ -e "${sshcs_env}" ] && add_file "${sshcs_env}"
   # Note: use /usr/local/bin, even though everything actually points to /usr/bin
   # in initramfs.
+  add_file '/usr/lib/initcpio/hooks/ssh-cryptsetup-env' '/usr/local/bin/ssh-cryptsetup-env'
   add_file '/usr/lib/initcpio/hooks/ssh-cryptsetup-tools' '/usr/local/bin/ssh-cryptsetup-tools'
 
   # crypt partitions
@@ -95,15 +97,6 @@ build() {
 
 build_ssh() {
   add_file "${sshcs_authorized_keys}" "${root_authorized_keys}"
-
-  local ssh_daemon_default=dropbear
-
-  [ -e "${sshcs_env}" ] && . "${sshcs_env}"
-  [ -z "${sshcs_opt_ssh_daemon}" ] && sshcs_opt_ssh_daemon=${ssh_daemon_default}
-
-  if [ "${sshcs_opt_ssh_daemon}" != 'dropbear' ] && [ "${sshcs_opt_ssh_daemon}" != 'openssh' ] && [ "${sshcs_opt_ssh_daemon}" != 'tinyssh' ]; then
-    die "Unknown SSH daemon: ${sshcs_opt_ssh_daemon}"
-  fi
 
   if [ "${sshcs_opt_ssh_daemon}" == 'openssh' ]; then
     build_ssh_openssh

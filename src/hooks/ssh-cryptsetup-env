@@ -1,0 +1,42 @@
+#!/bin/sh
+
+sshcs_env_load() {
+  sshcs_env='/etc/initcpio/sshcs_env'
+
+  local log_kmsg_default=1
+  local debug_default=0
+  local net_wol_default=g
+  local net_speed_default=10
+  local ssh_daemon_default=dropbear
+  local timeout_ipconfig_default=10
+  local timeout_poweroff_min=120
+  local use_shell_default=0
+
+  [ ${sshcs_env_loaded:-0} -eq 1 ] && return
+  [ -e "${sshcs_env}" ] && . "${sshcs_env}"
+  sshcs_env_loaded=1
+  [ -z "${sshcs_opt_log_kmsg}" ] && sshcs_opt_log_kmsg=${log_kmsg_default}
+  [ -z "${sshcs_opt_debug}" ] && sshcs_opt_debug=${debug_default}
+  [ -z "${sshcs_opt_net_wol+d}" ] && sshcs_opt_net_wol=${net_wol_default}
+  [ -z "${sshcs_opt_net_speed}" ] && sshcs_opt_net_speed=${net_speed_default}
+  [ -z "${sshcs_opt_timeout_ipconfig}" ] && sshcs_opt_timeout_ipconfig=${timeout_ipconfig_default}
+  [ -z "${sshcs_opt_ssh_daemon}" ] && sshcs_opt_ssh_daemon=${ssh_daemon_default}
+  sshcs_opt_port=${sshcs_opt_listen:-22}
+  [ -n "${sshcs_opt_listen}" ] && sshcs_opt_listen="-p ${sshcs_opt_listen}"
+  [ -z "${sshcs_opt_timeout_poweroff}" ] && sshcs_opt_timeout_poweroff=${timeout_poweroff_min}
+  [ -z "${sshcs_opt_use_shell}" ] && sshcs_opt_use_shell=${use_shell_default}
+  [ ${sshcs_opt_timeout_poweroff} -ge 0 ] && [ ${sshcs_opt_timeout_poweroff} -lt ${timeout_poweroff_min} ] && sshcs_opt_timeout_poweroff=${timeout_poweroff_min}
+
+  if [ "${sshcs_opt_ssh_daemon}" != 'dropbear' ] && [ "${sshcs_opt_ssh_daemon}" != 'openssh' ] && [ "${sshcs_opt_ssh_daemon}" != 'tinyssh' ]; then
+    if [ -e /etc/initrd-release ]; then
+      # We are executed during boot.
+      # Belt and suspenders: should have been checked during install.
+      log_err "Unknown SSH daemon, using dropbear: ${sshcs_opt_ssh_daemon}"
+      sshcs_opt_ssh_daemon='dropbear'
+    else
+      die "Unknown SSH daemon: ${sshcs_opt_ssh_daemon}"
+    fi
+  fi
+}
+
+sshcs_env_load
