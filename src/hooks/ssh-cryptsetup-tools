@@ -1,6 +1,6 @@
 #!/usr/bin/ash
 
-. "/init_functions"
+. /init_functions
 
 # Log debug message, if debug enabled.
 # Also log as kmsg if enabled.
@@ -28,7 +28,7 @@ log_err() {
 }
 
 sshcs_env_load() {
-  local sshcs_env="/etc/initcpio/sshcs_env"
+  local sshcs_env='/etc/initcpio/sshcs_env'
 
   local log_kmsg_default=1
   local debug_default=0
@@ -54,19 +54,19 @@ sshcs_env_load() {
   [ -z "${sshcs_opt_use_shell}" ] && sshcs_opt_use_shell=${use_shell_default}
   [ ${sshcs_opt_timeout_poweroff} -ge 0 ] && [ ${sshcs_opt_timeout_poweroff} -lt ${timeout_poweroff_min} ] && sshcs_opt_timeout_poweroff=${timeout_poweroff_min}
 
-  sshcs_cryptsetup_script="/.sshcs_cryptsetup_script.sh"
+  sshcs_cryptsetup_script='/.sshcs_cryptsetup_script.sh'
 
   # Belt and suspenders: should have been checked during install.
-  if [ "${sshcs_opt_ssh_daemon}" != "dropbear" ] && [ "${sshcs_opt_ssh_daemon}" != "openssh" ] && [ "${sshcs_opt_ssh_daemon}" != "tinyssh" ]; then
+  if [ "${sshcs_opt_ssh_daemon}" != 'dropbear' ] && [ "${sshcs_opt_ssh_daemon}" != 'openssh' ] && [ "${sshcs_opt_ssh_daemon}" != 'tinyssh' ]; then
     log_err "Unknown SSH daemon, using dropbear: ${sshcs_opt_ssh_daemon}"
-    sshcs_opt_ssh_daemon="dropbear"
+    sshcs_opt_ssh_daemon='dropbear'
   fi
 
-  sshd_process_name="dropbear"
-  if [ "${sshcs_opt_ssh_daemon}" == "openssh" ]; then
-    sshd_process_name="sshd-session"
-  elif [ "${sshcs_opt_ssh_daemon}" == "tinyssh" ]; then
-    sshd_process_name="tinysshd"
+  sshd_process_name='dropbear'
+  if [ "${sshcs_opt_ssh_daemon}" == 'openssh' ]; then
+    sshd_process_name='sshd-session'
+  elif [ "${sshcs_opt_ssh_daemon}" == 'tinyssh' ]; then
+    sshd_process_name='tinysshd'
   fi
 }
 
@@ -76,8 +76,8 @@ proc_parse_stat() {
   pid=$1
   cmd=
   ppid=
-  [ ! -e /proc/${pid}/stat ] && return 1
-  read unused cmd unused ppid unused < /proc/${pid}/stat
+  [ ! -e "/proc/${pid}/stat" ] && return 1
+  read unused cmd unused ppid unused < "/proc/${pid}/stat"
 }
 
 proc_find_parent_cmd() {
@@ -99,7 +99,7 @@ proc_find_parent_cmd() {
 
 proc_is_console() {
   if [ -z "${is_console:-}" ]; then
-    # We are in console if we were not forked from dropbear.
+    # We are in console if we were not forked from SSH.
     is_console=1
     proc_find_parent_cmd $$ "${sshd_process_name}" && is_console=0
   fi
@@ -113,19 +113,19 @@ sshcs_net_start() {
   # we must have an 'ip' setting, and a device in it
   [ -z "${ip}" ] && [ -n "${nfsaddrs}" ] && ip="${nfsaddrs}"
   [ -z "${ip}" ] && {
-    log_dbg "No ip setting to setup network"
+    log_dbg 'No ip setting to setup network'
     return 1
   }
 
   net_device=$(echo ${ip} | cut -d: -f6)
   [ -z "${net_device}" ] && {
-    log_dbg "No network device to setup"
+    log_dbg 'No network device to setup'
     return 1
   }
 
   # Note: ethtool can access WoL settings right now, but not other settings
   # until the network is setup.
-  if [ "${sshcs_opt_net_wol:-d}" != "d" ]; then
+  if [ "${sshcs_opt_net_wol:-d}" != 'd' ]; then
     log_dbg "Setting network device=${net_device} wol=${sshcs_opt_net_wol}"
     ethtool -s "${net_device}" wol "${sshcs_opt_net_wol}"
   fi
@@ -137,13 +137,13 @@ sshcs_net_start() {
   # subshell from which outer variables cannot be altered.
   : > "${net_env}"
 
-  echo ""
+  echo ''
   echo "Configuring IP (timeout = ${sshcs_opt_timeout_ipconfig}s) ..."
   # ipconfig manual: https://git.kernel.org/pub/scm/libs/klibc/klibc.git/tree/usr/kinit/ipconfig/README.ipconfig
   ipconfig_out=$(ipconfig -t "${sshcs_opt_timeout_ipconfig}" "ip=${ip}")
   if [ $? -ne 0 ]; then
-    log_err "IP configuration timeout!"
-    echo "Devices probing:"
+    log_err 'IP configuration timeout!'
+    echo 'Devices probing:'
     ipconfig -n -t 5 -c none all
     return 1
   fi
@@ -151,7 +151,7 @@ sshcs_net_start() {
   echo -n "${ipconfig_out}" | while read line; do
     [ "${line#"IP-Config:"}" != "${line}" ] && continue
 
-    line="$(echo "${line}" | sed -e 's/ :/:/g;s/: /=/g')"
+    line=$(echo "${line}" | sed -e 's/ :/:/g;s/: /=/g')
 
     for iparg in ${line}; do
       case "${iparg}" in
@@ -220,7 +220,7 @@ sshcs_cleanup() {
 
     # cleanup SSH daemon
     if [ -f "${path_sshd_pid}" ]; then
-      log_dbg "Stopping SSH daemon ..."
+      log_dbg 'Stopping SSH daemon ...'
       kill $(cat "${path_sshd_pid}")
       rm -f "${path_sshd_pid}"
     fi
@@ -230,7 +230,7 @@ sshcs_cleanup() {
       # This is necessary to properly terminate both these shells and the spawned
       # SSH processes.
       # Reminder: "... | ..." does fork a subshell
-      log_dbg "Searching SSH shells ..."
+      log_dbg 'Searching SSH shells ...'
       pgrep_output=$(pgrep /usr/bin/ash)
       pgrep_output=$(echo "${pgrep_output}" | grep -E -v "^(|1|$$)$")
       echo "${pgrep_output}" | while read pid; do
@@ -243,15 +243,15 @@ sshcs_cleanup() {
 
     # cleanup /dev/pts if necessary
     if [ ${dev_pts_mounted:-0} -ne 0 ]; then
-      log_dbg "Unmounting /dev/pts"
-      umount "/dev/pts"
-      rm -R "/dev/pts"
+      log_dbg 'Unmounting /dev/pts'
+      umount /dev/pts
+      rm -R /dev/pts
     fi
 
     # stop the network before going on in boot sequence
     sshcs_net_done
 
-    rm -f "${sshcs_cryptsetup_script}" "${sshcs_shell_script}" "/etc/passwd" "/etc/shells" "/var/log/lastlog"
+    rm -f "${sshcs_cryptsetup_script}" "${sshcs_shell_script}" /etc/passwd /etc/shells /var/log/lastlog
   elif [ ${sshcs_opt_use_shell} -eq 1 ]; then
     # We are in a SSH shell session.
 
@@ -262,7 +262,7 @@ sshcs_cleanup() {
     # Note: as a side effect, this will also kill the shell that was forked to
     # trigger a timeout, which is fine (we want to kill it, either from here or
     # from the init shell).
-    log_dbg "Searching console shells ..."
+    log_dbg 'Searching console shells ...'
     pgrep_output=$(pgrep /usr/bin/ash)
     pgrep_output=$(echo "${pgrep_output}" | grep -E -v "^(|1|$$)$")
     echo "${pgrep_output}" | while read pid; do
@@ -273,7 +273,7 @@ sshcs_cleanup() {
   fi
   # else: when in SSH shell script, we have nothing else to do other than exit.
 
-  log_dbg "All done"
+  log_dbg 'All done'
 }
 
 sshcs_check_done() {
@@ -292,15 +292,15 @@ sshcs_check_done() {
   sshcs_unlocked=1
   . "${sshcs_cryptsetup_script}"
   if [ ${sshcs_unlocked} -ne 1 ]; then
-    echo ""
+    echo ''
     # When finalizing in console, power off
     if [ ${finalize} -eq 1 ] &&  proc_is_console; then
-      log_err "Devices are still locked! Powering off."
+      log_err 'Devices are still locked! Powering off.'
       poweroff -f
     fi
 
     # When in shell or SSH, let user try again
-    log_err "Devices are still locked! Please retry."
+    log_err 'Devices are still locked! Please retry.'
     return
   fi
 
@@ -312,9 +312,9 @@ sshcs_check_done() {
     exit 0
   fi
 
-  echo ""
-  log_msg "cryptsetup succeeded! Boot sequence should go on."
-  proc_is_console || echo "Please wait and reconnect to nominal SSH service."
+  echo ''
+  log_msg 'cryptsetup succeeded! Boot sequence should go on.'
+  proc_is_console || echo 'Please wait and reconnect to nominal SSH service.'
 
   sshcs_cleanup
 }
