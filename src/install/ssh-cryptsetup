@@ -28,6 +28,12 @@ build() {
     return 0
   fi
 
+  # Only consider entries marked with 'x-initrd.attach'.
+  if ! grep -Ev '^\s*(#|$)' "${etc_crypttab}" | grep -Eq '(\s|,)x-initrd\.attach(\s|,|$)'; then
+    plain "There is no 'x-initrd.attach' device in ${etc_crypttab}. Skipping."
+    return 0
+  fi
+
   umask 0022
 
   local sd_on=0

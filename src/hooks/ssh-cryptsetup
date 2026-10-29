@@ -100,6 +100,7 @@ sshcs_cryptpart_process() {
 
   # get crypt options
   cryptargs=
+  x_initrd_attach=0
   for cryptopt in ${cryptoptions//,/ }; do
     case ${cryptopt} in
       discard)
@@ -109,11 +110,21 @@ sshcs_cryptpart_process() {
       luks)
         ;;
 
+      x-initrd.attach)
+        x_initrd_attach=1
+        ;;
+
       *)
         log_dbg "Device ${cryptdev} encryption option '${cryptopt}' not known, ignoring."
         ;;
     esac
   done
+
+  # Only consider entries marked with 'x-initrd.attach'.
+  if [ ${x_initrd_attach} -eq 0 ]; then
+    log_dbg "Device ${cryptdev} ignored: no x-initrd.attach option for boot setup"
+    return 0
+  fi
 
   # ensure device is encrypted and handled
   cryptdev_orig=${cryptdev}
