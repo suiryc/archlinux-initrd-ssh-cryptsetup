@@ -68,13 +68,8 @@ sshcs_ssh_run() {
     dev_pts_mounted=1
   fi
 
-  # Root user in /etc/passwd
-  echo "root:x:0:0:root:/root:${sshcs_shell_script}" >> /etc/passwd
-  echo "${sshcs_shell_script}" > /etc/shells
-
-  # SSH daemon requires /var/log/lastlog for tracking login information
-  [ ! -d /var/log ] && mkdir -p /var/log
-  touch /var/log/lastlog
+  # SSH usually uses [/var]/run/utmp, and dropbear at least complains if not present.
+  [ -e /var/run/utmp ] || touch /var/run/utmp
 
   if [ "${sshcs_opt_ssh_daemon}" == 'openssh' ]; then
     log_dbg 'Starting sshd ...'
@@ -217,43 +212,11 @@ else
 fi
 EOF
   chmod a+x "${sshcs_cryptsetup_script}"
-
-  if [ ${sshcs_opt_use_shell} -eq 0 ]; then
-    # The script we built *is* the shell to run.
-    sshcs_shell_script=${sshcs_cryptsetup_script}
-  else
-    # User will have a full shell, and can call the script if needed.
-    cat <<EOF > "${sshcs_shell_script}"
-#!/usr/bin/ash
-
-. /usr/local/bin/ssh-cryptsetup-tools
-
-# HOME is / by default otherwise
-export HOME=/root
-
-echo ''
-echo "Call ${sshcs_cryptsetup_script} to try unlocking device(s)"
-echo '(available in shell history)'
-
-# Now give the user its shell
-/usr/bin/ash +m
-
-# Check whether we are fully done
-sshcs_check_done 1
-EOF
-    chmod a+x "${sshcs_shell_script}"
-
-    # Add command to unlock disks in shell history for easier use
-    echo ${sshcs_cryptsetup_script} >> /root/.ash_history
-    chmod 600 /root/.ash_history
-  fi
 }
 
 run_hook() {
   local etc_crypttab='/etc/crypttab'
   local path_sshd_pid='/.sshd.pid'
-  local sshcs_shell_script='/.sshcs_shell.sh'
-  local net_env='/.sshcs_net_env.sh'
   local line net_device
   local CSQUIET
 

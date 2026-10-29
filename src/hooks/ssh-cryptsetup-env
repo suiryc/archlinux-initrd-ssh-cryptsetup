@@ -37,6 +37,18 @@ sshcs_env_load() {
       die "Unknown SSH daemon: ${sshcs_opt_ssh_daemon}"
     fi
   fi
+
+  # network vars
+  net_env='/.sshcs_net_env.sh'
+  # main shell script (console or SSH)
+  sshcs_shell_script='/.sshcs_shell.sh'
+  # script that does unlock target devices
+  sshcs_cryptsetup_script='/.sshcs_cryptsetup_script.sh'
+
+  if [ ${sshcs_opt_use_shell} -eq 0 ]; then
+    # The cryptsetup script *is* the shell to run.
+    sshcs_shell_script=${sshcs_cryptsetup_script}
+  fi
 }
 
 sshcs_env_load

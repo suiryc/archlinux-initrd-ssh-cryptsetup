@@ -3,7 +3,7 @@
 sshcs_check_nonempty() {
   local filepath="$1"
 
-  [ -e "${filepath}" ] && grep -q -v '^\s*\(#\|$\)' "${filepath}"
+  [ -e "${filepath}" ] && grep -Eqv '^\s*(#|$)' "${filepath}"
 }
 
 build() {
@@ -98,6 +98,48 @@ build() {
 build_ssh() {
   add_file "${sshcs_authorized_keys}" "${root_authorized_keys}"
 
+  if [ ${sshcs_opt_use_shell} -ne 0 ]; then
+    # User will have a full shell, and can call the script if needed.
+    cat <<EOF > "${BUILDROOT}${sshcs_shell_script}"
+#!/usr/bin/ash
+
+. /usr/local/bin/ssh-cryptsetup-tools
+
+# HOME is / by default otherwise
+export HOME=/root
+
+echo ''
+echo "Call ${sshcs_cryptsetup_script} to try unlocking device(s)"
+echo '(available in shell history)'
+echo ''
+
+# Now give the user its shell
+/usr/bin/ash -i +m
+
+# Check whether we are fully done
+sshcs_check_done 1
+EOF
+    chmod a+x "${BUILDROOT}${sshcs_shell_script}"
+
+    # Add command to unlock disks in shell history for easier use
+    echo "${sshcs_cryptsetup_script}" >> "${BUILDROOT}/root/.ash_history"
+    chmod 600 "${BUILDROOT}/root/.ash_history"
+  fi
+
+  # Root user in /etc/passwd
+  if [ -e "${BUILDROOT}/etc/passwd" ]; then
+    # root user may have been provisioned by another hook already.
+    sed -i '/^root:/d' "${BUILDROOT}/etc/passwd"
+  fi
+  echo "root:x:0:0:root:/root:${sshcs_shell_script}" >> "${BUILDROOT}/etc/passwd"
+  echo "${sshcs_shell_script}" >> "${BUILDROOT}/etc/shells"
+
+  # SSH daemon often uses /var/log/lastlog for tracking login information.
+  # And dropbear also tries to update /var/log/wtmp and /var/run/utmp (/run).
+  add_dir '/var/log'
+  touch "${BUILDROOT}/var/log/lastlog"
+  touch "${BUILDROOT}/var/log/wtmp"
+
   if [ "${sshcs_opt_ssh_daemon}" == 'openssh' ]; then
     build_ssh_openssh
   elif [ "${sshcs_opt_ssh_daemon}" == 'tinyssh' ]; then
@@ -190,8 +232,8 @@ build_ssh_openssh() {
   add_binary '/usr/lib/ssh/sshd-auth'
 
   # OpenSSH requires the 'nobody' user to be present.
-  grep 'nobody' '/etc/passwd' > "${BUILDROOT}/etc/passwd"
-  grep 'nobody' '/etc/group' > "${BUILDROOT}/etc/group"
+  grep 'nobody' '/etc/passwd' >> "${BUILDROOT}/etc/passwd"
+  grep 'nobody' '/etc/group' >> "${BUILDROOT}/etc/group"
 
   add_dir '/etc/ssh/'
   cat <<EOF >> "${BUILDROOT}/etc/ssh/sshd_config"
@@ -199,6 +241,7 @@ PidFile                       /.sshd.pid
 SyslogFacility                AUTHPRIV
 PermitRootLogin               prohibit-password
 AuthorizedKeysFile            .ssh/authorized_keys
+PasswordAuthentication        no
 KbdInteractiveAuthentication  no
 AuthenticationMethods         publickey
 UsePAM                        no
