@@ -1,0 +1,98 @@
+#!/bin/sh
+
+. /usr/local/bin/ssh-cryptsetup-tools
+
+network_diagnostic() {
+  echo '===== Links'
+  ip link show
+  echo '===== Addresses'
+  ip addr show
+}
+
+# Set TERM if needed.
+# Makes systemd happy, at least when using systemctl in shell.
+if [ -z "${TERM:-}" ]; then
+  export TERM=linux
+fi
+
+if [ "$1" == 'pre' ]; then
+  if [ ${sshcs_opt_timeout_poweroff} -gt 0 ]; then
+    echo ''
+    echo "WARNING! Automatic poweroff will be triggered in ${sshcs_opt_timeout_poweroff}s"
+    echo 'To deactivate, please unlock devices'
+  fi
+
+  # When using a shell (will be started after this), prevent systemd from
+  # querying passwords on console: user is expected to do this in the shell.
+  if [ ${sshcs_opt_use_shell} -ne 0 ]; then
+    systemctl stop systemd-ask-password-console.path
+    systemctl stop systemd-ask-password-console.service
+  fi
+
+  ip=""
+  for arg in $(cat /proc/cmdline); do
+    case "$arg" in
+      ip=*)
+        ip="${arg#ip=}"
+        break
+        ;;
+    esac
+  done
+
+  net_device=$(echo "${ip}" | cut -d: -f6)
+  if [ -z "${net_device}" ]; then
+    log_err 'No network device to setup'
+    network_diagnostic
+    return
+  fi
+
+  sshcs_net_wol_setup
+
+  echo ''
+  echo "Configuring IP (timeout = ${sshcs_opt_timeout_ipconfig}s) ..."
+  /usr/lib/systemd/systemd-networkd-wait-online --interface="${net_device}" --operational-state=routable --timeout="${sshcs_opt_timeout_ipconfig}"
+  if [ $? -ne 0 ]; then
+    log_err 'IP configuration timeout!'
+    network_diagnostic
+    sshcs_net_speed_reduce
+    return
+  fi
+
+  ip -br link show "${net_device}"
+  ip -br addr show "${net_device}"
+
+  sshcs_net_speed_reduce
+
+  return
+fi
+
+if [ "$1" == 'shell' ]; then
+  log_dbg "Running ${sshcs_shell_script}"
+  if [ ! -e "${sshcs_shell_script}" ]; then
+    log_err "No script to run! ${sshcs_shell_script} does not exist!"
+    return
+  fi
+  . "${sshcs_shell_script}"
+
+  return
+fi
+
+if [ "$1" == 'post' ]; then
+  if [ ${sshcs_opt_use_shell} -ne 0 ]; then
+    # Forcefully stop shell, because user may not have logged out yet, or
+    # systemd-tty-ask-password-agent may be called with --watch (indefinitely
+    # blocking).
+    systemctl stop initrd-sshcs-shell
+  fi
+
+  systemctl stop initrd-sshcs-timeout.timer
+  log_dbg 'Timeout cleared.'
+  return
+fi
+
+if [ "$1" == 'timeout' ]; then
+  echo 'Timeout reached! Powering off.'
+  sleep 2
+  systemctl --no-block poweroff
+  return
+fi

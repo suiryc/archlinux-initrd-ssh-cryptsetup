@@ -30,6 +30,15 @@ build() {
 
   umask 0022
 
+  local sd_on=0
+  if [ -e "${BUILDROOT}/usr/bin/systemctl" ]; then
+    plain 'Building for systemd setup'
+    sd_on=1
+    build_sd
+  else
+    plain 'Building for non-systemd setup'
+  fi
+
   # Note: parts of this script (modules/binaries/files added) are the same than
   # other install scripts (/usr/lib/initcpio/install/):
   #   - 'encrypt': nominal support of encrypted volumes at boot time
@@ -87,12 +96,156 @@ build() {
   add_file '/usr/lib/initcpio/hooks/ssh-cryptsetup-tools' '/usr/local/bin/ssh-cryptsetup-tools'
 
   # crypt partitions
-  add_file "${etc_crypttab}"
+  # When using systemd, sd-encrypt will take care of this. And the way it is done,
+  # a bug would create an empty file if the file already exists. So don't do it
+  # on our side.
+  if [ ${sd_on} -eq 0 ]; then
+    add_file "${etc_crypttab}"
+  fi
 
   # SSH-related things
   build_ssh
 
   add_runscript
+}
+
+build_sd() {
+  # Command used to unlock devices.
+  sshcs_cryptsetup_script='systemd-tty-ask-password-agent --query --watch'
+
+  # systemctl relies on 'less', and busybox variant is not good enough, making
+  # it painful to interact with systemd.
+  if [ ${sshcs_opt_use_shell} -ne 0 ]; then
+    add_binary 'less'
+  fi
+  # systemd-networkd-wait-online is used to wait for IP setup
+  add_binary '/usr/lib/systemd/systemd-networkd-wait-online'
+
+  # Also include terminal information:
+  #  - linux: pure console
+  #  - xterm-256color: used by SSH
+  for term in 'l/linux' 'x/xterm-256color'
+  do
+    add_file "/usr/share/terminfo/${term}"
+  done
+  add_symlink '/lib/terminfo' '/usr/share/terminfo'
+
+  # Our systemd dedicated helper script
+  add_file '/usr/lib/initcpio/hooks/ssh-cryptsetup-sd' '/usr/local/bin/ssh-cryptsetup-sd' 755
+
+  # We will setup a few systemd units.
+  add_dir '/etc/systemd/system'
+
+  # Timer, triggered if devices are not unlocked after a certain time.
+  cat <<EOF >> "${BUILDROOT}/etc/systemd/system/initrd-sshcs-timeout.service"
+[Unit]
+Description=sshcs disk unlocking timeout timer
+DefaultDependencies=no
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/ssh-cryptsetup-sd timeout
+StandardOutput=tty
+StandardError=tty
+TTYPath=/dev/console
+EOF
+  cat <<EOF >> "${BUILDROOT}/etc/systemd/system/initrd-sshcs-timeout.timer"
+[Unit]
+Description=sshcs disk unlocking timeout service
+DefaultDependencies=no
+
+[Timer]
+OnActiveSec=${sshcs_opt_timeout_poweroff}s
+AccuracySec=1s
+Unit=initrd-sshcs-timeout.service
+
+[Install]
+WantedBy=sysinit.target
+EOF
+  if [ ${sshcs_opt_timeout_poweroff} -gt 0 ]; then
+    add_symlink '/etc/systemd/system/sysinit.target.wants/initrd-sshcs-timeout.timer' '/etc/systemd/system/initrd-sshcs-timeout.timer'
+  fi
+
+  # Service running before unlocking devices.
+  cat <<EOF >> "${BUILDROOT}/etc/systemd/system/initrd-sshcs-pre.service"
+[Unit]
+Description=sshcs pre hook
+DefaultDependencies=no
+Requires=systemd-network-generator.service
+After=systemd-network-generator.service
+#After=systemd-networkd.service
+Before=systemd-cryptsetup@secured.service cryptsetup.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/ssh-cryptsetup-sd pre
+StandardOutput=tty
+StandardError=tty
+TTYPath=/dev/console
+TTYReset=yes
+
+[Install]
+WantedBy=cryptsetup.target
+EOF
+  add_symlink '/etc/systemd/system/cryptsetup.target.wants/initrd-sshcs-pre.service' '/etc/systemd/system/initrd-sshcs-pre.service'
+
+  # Service running after successful devices unlocking.
+  cat <<EOF >> "${BUILDROOT}/etc/systemd/system/initrd-sshcs-post.service"
+[Unit]
+Description=sshcs post hook
+DefaultDependencies=no
+Requires=systemd-cryptsetup@secured.service
+After=systemd-cryptsetup@secured.service
+Before=initrd-cleanup.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/ssh-cryptsetup-sd post
+StandardOutput=tty
+StandardError=tty
+TTYPath=/dev/console
+TTYReset=yes
+
+[Install]
+WantedBy=initrd.target
+EOF
+  add_symlink '/etc/systemd/system/initrd.target.wants/initrd-sshcs-post.service' '/etc/systemd/system/initrd-sshcs-post.service'
+
+  if [ ${sshcs_opt_use_shell} -ne 0 ]; then
+    # Service for interactive shell
+    cat <<EOF >> "${BUILDROOT}/etc/systemd/system/initrd-sshcs-shell.service"
+[Unit]
+Description=sshcs shell
+DefaultDependencies=no
+After=initrd-sshcs-pre.service
+Before=initrd-cleanup.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/ssh-cryptsetup-sd shell
+StandardInput=tty
+StandardOutput=tty
+StandardError=tty
+TTYPath=/dev/console
+TTYReset=yes
+
+[Install]
+WantedBy=initrd.target
+EOF
+    add_symlink '/etc/systemd/system/initrd.target.wants/initrd-sshcs-shell.service' '/etc/systemd/system/initrd-sshcs-shell.service'
+  fi
+
+  # Rely on systemd-networkd and its generator for network setup.
+  # Note: the generator does handle the 'ip=...' kernel option, automatically
+  # generating the corresponding systemd-networkd configuration files.
+  add_systemd_unit 'systemd-networkd.service'
+  add_symlink '/etc/systemd/system/sysinit.target.wants/systemd-networkd.service' '/usr/lib/systemd/system/systemd-networkd.service'
+  add_systemd_unit 'systemd-network-generator.service'
+
+  # systemd-networkd.service requires user systemd-network
+  grep '^systemd-network:' /etc/passwd >> "${BUILDROOT}/etc/passwd"
+  grep '^systemd-network:' /etc/shadow >> "${BUILDROOT}/etc/shadow"
+  grep '^systemd-network:' /etc/group >> "${BUILDROOT}/etc/group"
 }
 
 build_ssh() {
@@ -124,6 +277,13 @@ EOF
     # Add command to unlock disks in shell history for easier use
     echo "${sshcs_cryptsetup_script}" >> "${BUILDROOT}/root/.ash_history"
     chmod 600 "${BUILDROOT}/root/.ash_history"
+  elif [ ${sd_on} -ne 0 ]; then
+    cat <<EOF > "${BUILDROOT}${sshcs_shell_script}"
+#!/usr/bin/ash
+
+exec ${sshcs_cryptsetup_script}
+EOF
+    chmod a+x "${BUILDROOT}${sshcs_shell_script}"
   fi
 
   # Root user in /etc/passwd
@@ -147,6 +307,16 @@ EOF
   else
     build_ssh_dropbear
   fi
+}
+
+build_ssh_service_deps() {
+  local drop_in=(
+    '[Unit]'
+    'Requires=initrd-sshcs-pre.service'
+    'After=initrd-sshcs-pre.service'
+    'DefaultDependencies=no'
+  )
+  printf "%s\n" "${drop_in[@]}" | add_systemd_drop_in "$1" override
 }
 
 build_ssh_dropbear() {
@@ -184,6 +354,14 @@ build_ssh_dropbear() {
     fingerprint=$(dropbearkey -y -f "${BUILDROOT}/${dropbear_keyfile}" | sed -n '/^Fingerprint:/ {s/Fingerprint: *//; p}')
     plain "$(basename "${dropbear_keyfile}"): ${fingerprint}"
   done
+
+  if [ ${sd_on} -eq 0 ]; then
+    return
+  fi
+
+  add_systemd_unit 'dropbear.service'
+  add_symlink '/etc/systemd/system/sysinit.target.wants/dropbear.service' '/usr/lib/systemd/system/dropbear.service'
+  build_ssh_service_deps 'dropbear.service'
 }
 
 build_ssh_tinyssh() {
@@ -218,6 +396,26 @@ build_ssh_tinyssh() {
 
   fingerprint=$(tinysshd-printkey "${BUILDROOT}/${tinyssh_keydir}" | ssh-keygen -lf - | cut -d' ' -f2)
   plain ".ed25519.sk: ${fingerprint}"
+
+  if [ ${sd_on} -eq 0 ]; then
+    return
+  fi
+
+  add_systemd_unit 'tinyssh@.socket'
+  add_systemd_unit 'tinyssh@.service'
+  add_symlink "/etc/systemd/system/sysinit.target.wants/tinyssh@${sshcs_opt_port}.socket" '/usr/lib/systemd/system/tinyssh@.socket'
+  build_ssh_service_deps "tinyssh@${sshcs_opt_port}.socket"
+
+  drop_in=(
+    "[Unit]"
+    "DefaultDependencies=no"
+    "CollectMode=inactive-or-failed"
+    ""
+    "[Service]"
+    "ExecStart="
+    "ExecStart=-/usr/bin/tinysshd ${SD_TINYSSH_COMMAND:+-e '${SD_TINYSSH_COMMAND}' }${tinyssh_keydir}"
+  )
+  printf "%s\n" "${drop_in[@]}" | add_systemd_drop_in 'tinyssh@.service' override
 }
 
 build_ssh_openssh() {
@@ -263,6 +461,14 @@ EOF
       plain "$(basename "${openssh_keyfile}"): ${fingerprint}"
     fi
   done
+
+  if [ ${sd_on} -eq 0 ]; then
+    return
+  fi
+
+  add_systemd_unit 'sshd.service'
+  add_symlink '/etc/systemd/system/sysinit.target.wants/sshd.service' '/usr/lib/systemd/system/sshd.service'
+  build_ssh_service_deps 'sshd.service'
 }
 
 help() {

@@ -253,6 +253,11 @@ sshcs_cleanup() {
 }
 
 sshcs_check_done() {
+  if [ -e /usr/bin/systemctl ]; then
+    echo 'Skipping sshcs_check_done: systemd present'
+    return
+  fi
+
   # Whether we are called from the main script: that is whether the shell will
   # end when we return.
   local finalize=$1
