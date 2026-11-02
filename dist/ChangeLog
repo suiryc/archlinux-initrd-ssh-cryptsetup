@@ -1,3 +1,37 @@
+2026-11-02 Julien Coloos <julien.coloos [at] gmail [dot] com>
+
+        * v2.0-1
+        Gracefully handle both BusyBox and systemd initramfs building.
+        Building script does check systemctl presence to determine setup.
+        systemd-networkd configuration is generated from the same 'ip=...'
+        parameter already used for BusyBox.
+
+        Only unlock /etc/crypttab entries with 'x-initrd.attach' option.
+
+        Aside from DropBear, also handle TinySSH and OpenSSH servers.
+        Use DropBear existing keys if present, instead of regenerating them
+        from OpenSSH every time.
+        Expect authorized public key(s) in a dedicated /etc/initcpio/ file
+        instead of a DropBear-related one.
+
+        Fix WoL option handling: setting empty was not disabling it.
+        Pre-save unlocking command/script in shell history when applicable.
+        Add some more logs.
+
+        Make script execution more resilient when possible, preventing hard
+        boot crash and allowing local user to continue or remote user to access
+        an interactive shell.
+        Fix some minor bugs.
+
+        Refactor files to better separate code used for non-systemd, systemd,
+        or either setups.
+        Only keep main scripts in 'install' and 'hook' initcpio folders, and
+        install other files in a dedicated 'sshcs' folder.
+        Also install the README file, for further details on setup.
+
+        Handle local building mode, to easily test changes before release.
+
+
 2026-07-12 Julien Coloos <julien.coloos [at] gmail [dot] com>
 
         * v1.2-1

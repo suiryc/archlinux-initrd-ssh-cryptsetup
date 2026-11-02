@@ -1,6 +1,6 @@
 # Maintainer: Julien Coloos <julien.coloos [at] gmail [dot] com>
 pkgname=initrd-ssh-cryptsetup
-pkgver=1.2
+pkgver=2.0
 pkgrel=1
 pkgdesc="Allows remotely unlocking LUKS-encrypted devices over SSH"
 arch=('any')
@@ -16,8 +16,8 @@ src_tarball="$pkgname-$pkgver-$pkgrel.tar.xz"
 noextract=("$src_tarball")
 source=("http://julien.coloos.free.fr/archlinux/$src_tarball"
         "$pkgname.install")
-sha256sums=('94156250bfc04490801d8575192a787363cf4637ade2473147d3f63924c5f814'
-            '2ca5615706b0cae2cc1ce21abe417de326da386ce61270af8e01d40861c42310')
+sha256sums=('68dca6738307b7775d115fa550d5f2b2309fe301205bb4332bb2a014a233eab9'
+            'f5ccb64349fbd32205c29bd35a2f766b480e2eab76499dacc1f9d6b35e97d403')
 
 prepare() {
   if [ ${LOCAL:-0} -eq 0 ]; then
