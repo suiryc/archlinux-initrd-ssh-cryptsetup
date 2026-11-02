@@ -188,7 +188,7 @@ sshcs_opt_use_shell=1
 2. If sources were modified
    * bump `pkgver`, or `pkgrel`, in `PKGBUILD`
    * archive the sources folder in `$pkgname-$pkgver-$pkgrel.tar.xz` file
-     * e.g.: `tar -cJf initrd-ssh-cryptsetup-$(grep "^pkgver=" PKGBUILD | cut -d'=' -f2)-$(grep "^pkgrel=" PKGBUILD | cut -d'=' -f2).tar.xz src`
+     * e.g.: `tar -cJf initrd-ssh-cryptsetup-$(grep "^pkgver=" dist/PKGBUILD | cut -d'=' -f2)-$(grep "^pkgrel=" dist/PKGBUILD | cut -d'=' -f2).tar.xz README.md src`
    * upload the archive to the online repository (pointed to by `PKGBUILD`)
 3. Update ChangeLog
 4. Update `PKGBUILD`
