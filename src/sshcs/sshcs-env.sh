@@ -34,21 +34,17 @@ sshcs_env_load() {
       log_err "Unknown SSH daemon, using dropbear: ${sshcs_opt_ssh_daemon}"
       sshcs_opt_ssh_daemon='dropbear'
     else
+      # We are building initramfs: fail.
       die "Unknown SSH daemon: ${sshcs_opt_ssh_daemon}"
     fi
   fi
 
-  # network vars
+  # Script with network vars.
   net_env='/.sshcs_net_env.sh'
-  # main shell script (console or SSH)
+  # Main script for SSH, or when running interactive shell.
   sshcs_shell_script='/.sshcs_shell.sh'
-  # script that does unlock target devices
+  # Actual script that does unlock target devices.
   sshcs_cryptsetup_script='/.sshcs_cryptsetup_script.sh'
-
-  if [ ${sshcs_opt_use_shell} -eq 0 ]; then
-    # The cryptsetup script *is* the shell to run.
-    sshcs_shell_script=${sshcs_cryptsetup_script}
-  fi
 }
 
 sshcs_env_load

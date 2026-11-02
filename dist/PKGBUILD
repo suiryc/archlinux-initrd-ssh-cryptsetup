@@ -2,7 +2,7 @@
 pkgname=initrd-ssh-cryptsetup
 pkgver=1.2
 pkgrel=1
-pkgdesc="Allows to remotely unlock LUKS-encrypted devices over SSH"
+pkgdesc="Allows remotely unlocking LUKS-encrypted devices over SSH"
 arch=('any')
 url="https://github.com/suiryc/archlinux-$pkgname"
 license=('GPL3')
@@ -17,7 +17,7 @@ noextract=("$src_tarball")
 source=("http://julien.coloos.free.fr/archlinux/$src_tarball"
         "$pkgname.install")
 sha256sums=('94156250bfc04490801d8575192a787363cf4637ade2473147d3f63924c5f814'
-            '8bfbc02c4bcb61d3fb95361267a4c083142f570782166a58c11dfbaac478c3c4')
+            '2ca5615706b0cae2cc1ce21abe417de326da386ce61270af8e01d40861c42310')
 
 prepare() {
   if [ ${LOCAL:-0} -eq 0 ]; then
@@ -31,9 +31,13 @@ prepare() {
 }
 
 package() {
-  install -Dm644 "$srcdir/src/install/ssh-cryptsetup"     "$pkgdir/usr/lib/initcpio/install/ssh-cryptsetup"
-  install -Dm644 "$srcdir/src/hooks/ssh-cryptsetup"       "$pkgdir/usr/lib/initcpio/hooks/ssh-cryptsetup"
-  install -Dm644 "$srcdir/src/hooks/ssh-cryptsetup-sd"    "$pkgdir/usr/lib/initcpio/hooks/ssh-cryptsetup-sd"
-  install -Dm644 "$srcdir/src/hooks/ssh-cryptsetup-env"   "$pkgdir/usr/lib/initcpio/hooks/ssh-cryptsetup-env"
-  install -Dm644 "$srcdir/src/hooks/ssh-cryptsetup-tools" "$pkgdir/usr/lib/initcpio/hooks/ssh-cryptsetup-tools"
+  install -Dm644 "$srcdir/src/install/ssh-cryptsetup" "$pkgdir/usr/lib/initcpio/install/ssh-cryptsetup"
+  install -Dm644 "$srcdir/src/hooks/ssh-cryptsetup"   "$pkgdir/usr/lib/initcpio/hooks/ssh-cryptsetup"
+
+  install -Dm755 "$srcdir/src/sshcs/sshcs-env.sh"      "$pkgdir/usr/lib/initcpio/sshcs/sshcs-env.sh"
+  install -Dm755 "$srcdir/src/sshcs/sshcs-tools.sh"    "$pkgdir/usr/lib/initcpio/sshcs/sshcs-tools.sh"
+  install -Dm755 "$srcdir/src/sshcs/sshcs-tools-bb.sh" "$pkgdir/usr/lib/initcpio/sshcs/sshcs-tools-bb.sh"
+  install -Dm755 "$srcdir/src/sshcs/sshcs-sd.sh"       "$pkgdir/usr/lib/initcpio/sshcs/sshcs-sd.sh"
+
+  install -Dm644 "$srcdir/README.md" "$pkgdir/usr/lib/initcpio/sshcs/README.md"
 }

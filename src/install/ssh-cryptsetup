@@ -7,7 +7,7 @@ sshcs_check_nonempty() {
 }
 
 build() {
-  . /usr/lib/initcpio/hooks/ssh-cryptsetup-env
+  . /usr/lib/initcpio/sshcs/sshcs-env.sh
 
   local etc_crypttab='/etc/crypttab'
   local sshcs_authorized_keys='/etc/initcpio/sshcs_authorized_keys'
@@ -20,7 +20,7 @@ build() {
 
   # Check we are needed
   if ! sshcs_check_nonempty "${sshcs_authorized_keys}"; then
-    plain "There is no root key(s) in ${sshcs_authorized_keys}. Skipping."
+    plain "There are no root key(s) in ${sshcs_authorized_keys}. Skipping."
     return 0
   fi
   if ! sshcs_check_nonempty "${etc_crypttab}"; then
@@ -38,14 +38,37 @@ build() {
 
   local sd_on=0
   if [ -e "${BUILDROOT}/usr/bin/systemctl" ]; then
-    plain 'Building for systemd setup'
     sd_on=1
     build_sd
   else
-    plain 'Building for non-systemd setup'
+    build_bb
   fi
 
-  # Note: parts of this script (modules/binaries/files added) are the same than
+  # We need to add modules for network connectivity.
+  # (as does 'net' for example)
+  add_checked_modules '/drivers/net/'
+
+  # Binaries we use.
+  add_binary 'ip'
+  add_binary 'ethtool'
+
+  # Our common scripts and options.
+  [ -e "${sshcs_env}" ] && add_file "${sshcs_env}"
+  # Note: use /usr/local/bin, even though everything actually points to /usr/bin
+  # in initramfs.
+  add_file '/usr/lib/initcpio/sshcs/sshcs-env.sh' '/usr/local/bin/sshcs-env.sh'
+  add_file '/usr/lib/initcpio/sshcs/sshcs-tools.sh' '/usr/local/bin/sshcs-tools.sh'
+
+  # SSH-related things
+  build_ssh
+
+  add_runscript
+}
+
+build_bb() {
+  plain 'Building for non-systemd setup'
+
+  # Note: parts of this script (modules/binaries/files added) are the same as
   # other install scripts (/usr/lib/initcpio/install/):
   #   - 'encrypt': nominal support of encrypted volumes at boot time
   #   - 'net': network tools
@@ -63,9 +86,6 @@ build() {
     add_all_modules '/crypto/'
   fi
 
-  # (from 'net')
-  add_checked_modules '/drivers/net/'
-
 
   ## Binaries
   # (from 'encrypt')
@@ -81,8 +101,6 @@ build() {
   # (ours)
   # Note: dmsetup is necessary for device mapper features
   add_binary 'dmsetup'
-  add_binary 'ip'
-  add_binary 'ethtool'
 
 
   ## Other files
@@ -94,28 +112,18 @@ build() {
       '95-dm-notify.rules'
 
   # (ours)
-  # Our script and options
-  [ -e "${sshcs_env}" ] && add_file "${sshcs_env}"
-  # Note: use /usr/local/bin, even though everything actually points to /usr/bin
-  # in initramfs.
-  add_file '/usr/lib/initcpio/hooks/ssh-cryptsetup-env' '/usr/local/bin/ssh-cryptsetup-env'
-  add_file '/usr/lib/initcpio/hooks/ssh-cryptsetup-tools' '/usr/local/bin/ssh-cryptsetup-tools'
+  add_file '/usr/lib/initcpio/sshcs/sshcs-tools-bb.sh' '/usr/local/bin/sshcs-tools-bb.sh'
 
   # crypt partitions
-  # When using systemd, sd-encrypt will take care of this. And the way it is done,
-  # a bug would create an empty file if the file already exists. So don't do it
-  # on our side.
-  if [ ${sd_on} -eq 0 ]; then
-    add_file "${etc_crypttab}"
-  fi
-
-  # SSH-related things
-  build_ssh
-
-  add_runscript
+  # Note: when using systemd, sd-encrypt will take care of this. And the way it
+  # is done, a bug would create an empty file if the file already exists. So we
+  # only process this file in non-systemd.
+  add_file "${etc_crypttab}"
 }
 
 build_sd() {
+  plain 'Building for systemd setup'
+
   # Command used to unlock devices.
   sshcs_cryptsetup_script='systemd-tty-ask-password-agent --query --watch'
 
@@ -137,7 +145,7 @@ build_sd() {
   add_symlink '/lib/terminfo' '/usr/share/terminfo'
 
   # Our systemd dedicated helper script
-  add_file '/usr/lib/initcpio/hooks/ssh-cryptsetup-sd' '/usr/local/bin/ssh-cryptsetup-sd' 755
+  add_file '/usr/lib/initcpio/sshcs/sshcs-sd.sh' '/usr/local/bin/sshcs-sd.sh' 755
 
   # We will setup a few systemd units.
   add_dir '/etc/systemd/system'
@@ -150,7 +158,7 @@ DefaultDependencies=no
 
 [Service]
 Type=oneshot
-ExecStart=/usr/local/bin/ssh-cryptsetup-sd timeout
+ExecStart=/usr/local/bin/sshcs-sd.sh timeout
 StandardOutput=tty
 StandardError=tty
 TTYPath=/dev/console
@@ -184,7 +192,7 @@ Before=systemd-cryptsetup@secured.service cryptsetup.target
 
 [Service]
 Type=oneshot
-ExecStart=/usr/local/bin/ssh-cryptsetup-sd pre
+ExecStart=/usr/local/bin/sshcs-sd.sh pre
 StandardOutput=tty
 StandardError=tty
 TTYPath=/dev/console
@@ -206,7 +214,7 @@ Before=initrd-cleanup.service
 
 [Service]
 Type=oneshot
-ExecStart=/usr/local/bin/ssh-cryptsetup-sd post
+ExecStart=/usr/local/bin/sshcs-sd.sh post
 StandardOutput=tty
 StandardError=tty
 TTYPath=/dev/console
@@ -228,7 +236,7 @@ Before=initrd-cleanup.service
 
 [Service]
 Type=oneshot
-ExecStart=/usr/local/bin/ssh-cryptsetup-sd shell
+ExecStart=/usr/local/bin/sshcs-sd.sh shell
 StandardInput=tty
 StandardOutput=tty
 StandardError=tty
@@ -262,35 +270,46 @@ build_ssh() {
     cat <<EOF > "${BUILDROOT}${sshcs_shell_script}"
 #!/usr/bin/ash
 
-. /usr/local/bin/ssh-cryptsetup-tools
-
-# HOME is / by default otherwise
-export HOME=/root
+. /usr/local/bin/sshcs-tools.sh
 
 echo ''
 echo "Call ${sshcs_cryptsetup_script} to try unlocking device(s)"
 echo '(available in shell history)'
 echo ''
 
-# Now give the user its shell
+call_exists sshcs_ssh_shell_trigger
+
+# Now give the user their shell
 /usr/bin/ash -i +m
 
-# Check whether we are fully done
-sshcs_check_done 1
+# In non-systemd initramfs, we have to ensure we are done before leaving.
+call_exists sshcs_check_done 1
 EOF
-    chmod a+x "${BUILDROOT}${sshcs_shell_script}"
 
     # Add command to unlock disks in shell history for easier use
     echo "${sshcs_cryptsetup_script}" >> "${BUILDROOT}/root/.ash_history"
     chmod 600 "${BUILDROOT}/root/.ash_history"
-  elif [ ${sd_on} -ne 0 ]; then
+  elif [ ${sd_on} -eq 0 ]; then
+    # non-systemd without full shell: we create a simple wrapper for SSH shell,
+    # to call the same logic as inside the console, with error handling.
+    cat <<EOF > "${BUILDROOT}${sshcs_shell_script}"
+#!/usr/bin/ash
+
+. /usr/local/bin/sshcs-tools.sh
+
+sshcs_ssh_shell_trigger
+sshcs_shell_main
+EOF
+  else
+    # systemd without full shell: we create a minimal wrapper for SSH shell
+    # to call the actual command.
     cat <<EOF > "${BUILDROOT}${sshcs_shell_script}"
 #!/usr/bin/ash
 
 exec ${sshcs_cryptsetup_script}
 EOF
-    chmod a+x "${BUILDROOT}${sshcs_shell_script}"
   fi
+  chmod a+x "${BUILDROOT}${sshcs_shell_script}"
 
   # Root user in /etc/passwd
   if [ -e "${BUILDROOT}/etc/passwd" ]; then
@@ -316,6 +335,12 @@ EOF
 }
 
 build_ssh_service_deps() {
+  # We rely on nominal SSH service units.
+  # During initramfs, we need to ensure that:
+  #  - the service waits for our 'pre' service to be done: 'Requires' (skip upon
+  #    failure) + 'After'
+  #  - the service is not queued after sysinit.target, so that it is started
+  #    when appropriate: 'DefaultDependencies=no'
   local drop_in=(
     '[Unit]'
     'Requires=initrd-sshcs-pre.service'
@@ -416,10 +441,6 @@ build_ssh_tinyssh() {
     "[Unit]"
     "DefaultDependencies=no"
     "CollectMode=inactive-or-failed"
-    ""
-    "[Service]"
-    "ExecStart="
-    "ExecStart=-/usr/bin/tinysshd ${SD_TINYSSH_COMMAND:+-e '${SD_TINYSSH_COMMAND}' }${tinyssh_keydir}"
   )
   printf "%s\n" "${drop_in[@]}" | add_systemd_drop_in 'tinyssh@.service' override
 }
@@ -485,13 +506,14 @@ This hook allows for LUKS encrypted devices to be unlocked either locally
 Network is configured with 'ip=' kernel parameter (see 'mkinitcpio-nfs-utils').
 Authorized SSH key(s) must be present in '/etc/initcpio/sshcs_authorized_keys'.
 LUKS encrypted devices to unlock are derived from '/etc/crypttab', which must
-be present.
+be present: only entries with 'x-initrd.attach' option are processed upon boot.
 Some options can be set in '/etc/initcpio/sshcs_env'.
-See the README for more details.
 
 Each SSH server key ('rsa', 'ecdsa' and/or 'ed25519'; see README for locations)
 is copied from SSH daemon configuration directory, converted from OpenSSH if
 present, or generated if missing. Fingerprints are displayed upon building the
 initramfs image.
+
+See (/usr/lib/initcpio/sshcs/)README.md for more information.
 EOF
 }

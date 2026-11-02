@@ -1,35 +1,28 @@
 #!/usr/bin/ash
 
-. /usr/local/bin/ssh-cryptsetup-tools
+. /usr/local/bin/sshcs-tools.sh
 
-sshcs_trapped_timeout() {
-  log_err 'Timeout reached! Powering off.'
-  sleep 2
-  poweroff -f
-  exit
-}
-
-sshcs_trap_timeout() {
+# Start timeout in the background.
+sshcs_timeout_start() {
   local pid_init=$$
 
   if [ ${sshcs_opt_timeout_poweroff} -gt 0 ]; then
     echo ''
     echo "WARNING! Automatic poweroff will be triggered in ${sshcs_opt_timeout_poweroff}s"
     echo 'To deactivate, please unlock devices'
-    trap sshcs_trapped_timeout SIGALRM
     (
       # Wait for timeout
       sleep ${sshcs_opt_timeout_poweroff}
-      # Signal process (triggers poweroff)
-      kill -SIGALRM ${pid_init}
-      # Note: signal is not processed if cryptsetup is waiting for the password
-      killall cryptsetup > /dev/null 2>&1
+      sshcs_poweroff_trigger
+      log_err 'Timeout reached! Powering off.'
+      sshcs_poweroff_soft
     ) &
     pid_timeout=$!
   fi
 }
 
-sshcs_untrap_timeout() {
+# Stop timeout.
+sshcs_timeout_stop() {
   [ -z "${pid_timeout:-}" ] && return 0
   # Notes:
   # If there was a running SSH shell, it may also try to kill it.
@@ -37,192 +30,7 @@ sshcs_untrap_timeout() {
   # running until done (which is not an issue).
   proc_parse_stat ${pid_timeout} && kill ${pid_timeout}
   pid_timeout=
-  trap - SIGALRM
   log_dbg 'Timeout cleared.'
-}
-
-sshcs_shell_run() {
-  sshcs_trap_timeout
-
-  # actual script (shared with SSH login) with which we can unlock devices
-  sshcs_unlocked_test=0
-  log_dbg "Running ${sshcs_shell_script}"
-  # Belt and suspenders: if the script does not exist, trying to source it
-  # actually triggers a kernel panic.
-  if [ ! -e "${sshcs_shell_script}" ]; then
-    log_err "No script to run! ${sshcs_shell_script} does not exist!"
-    return
-  fi
-  . "${sshcs_shell_script}"
-}
-
-sshcs_ssh_run() {
-  local dev_pts_mounted=0
-  local listen=
-
-  # ensure /dev/pts is present
-  if [ ! -d /dev/pts ]; then
-    log_dbg 'Mounting /dev/pts'
-    mkdir -p /dev/pts
-    mount -t devpts devpts /dev/pts
-    dev_pts_mounted=1
-  fi
-
-  # SSH usually uses [/var]/run/utmp, and dropbear at least complains if not present.
-  [ -e /var/run/utmp ] || touch /var/run/utmp
-
-  if [ "${sshcs_opt_ssh_daemon}" == 'openssh' ]; then
-    log_dbg 'Starting sshd ...'
-    /usr/bin/sshd ${sshcs_opt_listen}
-  elif [ "${sshcs_opt_ssh_daemon}" == 'tinyssh' ]; then
-    log_dbg 'Starting tinyssh ...'
-    # Note: tcpsvd hijacks stdin/stdout/stderr, which messes up cryptsetup trying
-    # to read the passphrase from the terminal if at least one SSH connection does
-    # happen.
-    # We need to redirect all these fds to fix this issue.
-    busybox tcpsvd 0 ${sshcs_opt_port} tinysshd -l /etc/tinyssh/sshkeydir </dev/null >/dev/null 2>&1 &
-    echo -n "$!" > "${path_sshd_pid}"
-  else
-    log_dbg 'Starting dropbear ...'
-    dropbear -Esgjk -P "${path_sshd_pid}" ${sshcs_opt_listen}
-  fi
-
-  # Actual unlocking shell
-  sshcs_shell_run
-}
-
-sshcs_cryptpart_process() {
-  local cryptdev_orig cryptopt cryptargs
-
-  # ensure there is a device (handle 'UUID=' format)
-  [ -z "${cryptdev}" ] && return 0
-  [ "${cryptdev#UUID=}" != "${cryptdev}" ] && cryptdev="/dev/disk/by-uuid/${cryptdev#UUID=}"
-
-  # get crypt options
-  cryptargs=
-  x_initrd_attach=0
-  for cryptopt in ${cryptoptions//,/ }; do
-    case ${cryptopt} in
-      discard)
-        cryptargs="${cryptargs} --allow-discards"
-        ;;
-
-      luks)
-        ;;
-
-      x-initrd.attach)
-        x_initrd_attach=1
-        ;;
-
-      *)
-        log_dbg "Device ${cryptdev} encryption option '${cryptopt}' not known, ignoring."
-        ;;
-    esac
-  done
-
-  # Only consider entries marked with 'x-initrd.attach'.
-  if [ ${x_initrd_attach} -eq 0 ]; then
-    log_dbg "Device ${cryptdev} ignored: no x-initrd.attach option for boot setup"
-    return 0
-  fi
-
-  # ensure device is encrypted and handled
-  cryptdev_orig=${cryptdev}
-  if cryptdev=$(resolve_device "${cryptdev_orig}" ${rootdelay}); then
-    if cryptsetup isLuks "${cryptdev}" >/dev/null 2>&1; then
-      log_dbg "Adding crypt device=${cryptdev} type=${crypttype} name=${cryptname} args=<${cryptargs}> in setup script"
-
-      # update script used to unlock device either in console or SSH
-      [ -s "${sshcs_cryptsetup_script}" ] || cat <<'EOF' > "${sshcs_cryptsetup_script}"
-#!/usr/bin/ash
-
-. /usr/local/bin/ssh-cryptsetup-tools
-
-cycle_or_retry() {
-  local res
-
-  read -n 1 -s -t 5 -p "Within 5s press 'P' to poweroff, 'R' to reboot or any other key to retry. " res
-  echo ''
-  [ "${res}" == 'P' ] && poweroff -f
-  [ "${res}" == 'R' ] && reboot -f
-}
-
-try_unlock() {
-EOF
-
-      cat <<EOF >> "${sshcs_cryptsetup_script}"
-  # loop until device is available
-  while [ ! -e "/dev/mapper/${cryptname}" ]; do
-    if [ \${sshcs_unlocked_test:-0} -eq 1 ]; then
-      sshcs_unlocked=0
-      return
-    fi
-    if cryptsetup open --type "${crypttype}" "${cryptdev}" "${cryptname}" ${cryptargs} "\${CSQUIET}"; then
-      if poll_device "/dev/mapper/${cryptname}" ${rootdelay}; then
-        killall cryptsetup > /dev/null 2>&1
-        break
-      fi
-      log_err 'Device still not mapped! Please wait or retry.'
-    elif [ ! -e "/dev/mapper/${cryptname}" ]; then
-      log_err 'cryptsetup failed! Please retry.'
-    else
-      break
-    fi
-
-    cycle_or_retry
-  done
-EOF
-    else
-      log_err "Failed to manage encrypted device ${cryptdev_orig}: not a LUKS volume."
-    fi
-  fi
-}
-
-sshcs_cryptpart_setup() {
-  local cryptdev crypttype cryptname cryptpass cryptoptions
-
-  # Notes:
-  # The script is built piece by piece to unlock each target device.
-  # If there is no device to unlock, there is no script, and boot should simply
-  # go on as usual.
-
-  # check encrypted devices to handle
-  cryptdev=
-  crypttype=luks
-  while read cryptname cryptdev cryptpass cryptoptions; do
-    # skip comment lines
-    [ "${cryptname:0:1}" = '#' ] && continue
-    # skip devices with given password
-    [ -n "${cryptpass}" ] && [ "${cryptpass}" != 'none' ] && [ "${cryptpass}" != '-' ] && continue
-
-    sshcs_cryptpart_process
-  done < "${etc_crypttab}"
-
-  # Nothing else to do if there is no device we can unlock
-  [ -s "${sshcs_cryptsetup_script}" ] || return 0
-
-  # There were devices to unlock.
-  # We can now finish the script.
-  cat <<'EOF' >> "${sshcs_cryptsetup_script}"
-  # No other device to unlock
-}
-
-if [ -c /dev/mapper/control ]; then
-  CSQUIET=
-  try_unlock
-
-  [ ${sshcs_unlocked_test:-0} -eq 1 ] && return
-  sshcs_check_done 0
-else
-  if [ \${sshcs_unlocked_test:-0} -eq 1 ]; then
-    sshcs_unlocked=0
-    return
-  fi
-  echo ''
-  log_err 'Device resources missing! Please retry.'
-fi
-EOF
-  chmod a+x "${sshcs_cryptsetup_script}"
 }
 
 run_hook() {
@@ -256,14 +64,14 @@ run_hook() {
     return 0
   fi
 
-  # start and check network
+  # Start and check network
   if ! sshcs_net_start; then
     log_err 'Net interface not available! Skipping crypt remote unlocking.'
-    # We still allow to unlock locally with timeout
-    sshcs_shell_run
+    # We still allow local unlocking with timeout
+    sshcs_shell_main
     return 0
   fi
 
-  # time to unlock (through console or SSH)
+  # Time to unlock (through console or SSH)
   sshcs_ssh_run
 }

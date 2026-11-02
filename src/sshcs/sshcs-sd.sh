@@ -1,6 +1,6 @@
 #!/bin/sh
 
-. /usr/local/bin/ssh-cryptsetup-tools
+. /usr/local/bin/sshcs-tools.sh
 
 network_diagnostic() {
   echo '===== Links'
@@ -9,12 +9,7 @@ network_diagnostic() {
   ip addr show
 }
 
-# Set TERM if needed.
-# Makes systemd happy, at least when using systemctl in shell.
-if [ -z "${TERM:-}" ]; then
-  export TERM=linux
-fi
-
+# 'pre': called before unlocking devices
 if [ "$1" == 'pre' ]; then
   if [ ${sshcs_opt_timeout_poweroff} -gt 0 ]; then
     echo ''
@@ -29,22 +24,10 @@ if [ "$1" == 'pre' ]; then
     systemctl stop systemd-ask-password-console.service
   fi
 
-  ip=""
-  for arg in $(cat /proc/cmdline); do
-    case "$arg" in
-      ip=*)
-        ip="${arg#ip=}"
-        break
-        ;;
-    esac
-  done
-
-  net_device=$(echo "${ip}" | cut -d: -f6)
-  if [ -z "${net_device}" ]; then
-    log_err 'No network device to setup'
+  ! sshcs_net_device && {
     network_diagnostic
     return
-  fi
+  }
 
   sshcs_net_wol_setup
 
@@ -66,6 +49,7 @@ if [ "$1" == 'pre' ]; then
   return
 fi
 
+# 'shell': interactive shell replaces the command to unlock devices
 if [ "$1" == 'shell' ]; then
   log_dbg "Running ${sshcs_shell_script}"
   if [ ! -e "${sshcs_shell_script}" ]; then
@@ -77,6 +61,7 @@ if [ "$1" == 'shell' ]; then
   return
 fi
 
+# 'post': called after (successfully) unlocking devices
 if [ "$1" == 'post' ]; then
   if [ ${sshcs_opt_use_shell} -ne 0 ]; then
     # Forcefully stop shell, because user may not have logged out yet, or
@@ -87,9 +72,13 @@ if [ "$1" == 'post' ]; then
 
   systemctl stop initrd-sshcs-timeout.timer
   log_dbg 'Timeout cleared.'
+
+  ! sshcs_net_device > /dev/null 2>&1 || sshcs_net_speed_restore
+
   return
 fi
 
+# 'timeout': called upon time
 if [ "$1" == 'timeout' ]; then
   echo 'Timeout reached! Powering off.'
   sleep 2

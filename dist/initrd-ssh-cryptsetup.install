@@ -9,7 +9,7 @@ post_install() {
     mv "${dropbear_authorized_keys}" "${sshcs_authorized_keys}"
     rmdir $(dirname "${dropbear_authorized_keys}") 2>/dev/null
     cat <<EOF
-    Moved legacy file ${dropbear_authorized_keys} to new path ${sshcs_authorized_keys}"
+    Moved legacy file ${dropbear_authorized_keys} to new path ${sshcs_authorized_keys}
 EOF
   }
   [ -d "${etc_initcpio}" ] || mkdir -p "${etc_initcpio}"
@@ -19,19 +19,18 @@ EOF
   cat <<EOF
     Install either 'dropbear', 'openssh' or 'tinyssh' package for SSH handling,
     and configure it in '/etc/initcpio/sshcs_env' if necessary.
-
     Generate dedicated server keys if nominal (after boot) ones are protected
     (e.g. on an encrypted disk).
-
-    Add the SSH client public key to '${sshcs_authorized_keys}'.
+    Add the SSH client public key(s) to '${sshcs_authorized_keys}'.
 
     Add the 'ip=' kernel command parameter to the bootloader configuration
     (see https://wiki.archlinux.org/index.php/Mkinitcpio#Using_net).
 
     In the 'HOOKS' section of '/etc/mkinitcpio.conf', add 'ssh-cryptsetup'
     before 'filesystems'.
-
     Then rebuild the initramfs: 'mkinitcpio -p linux'
+
+    See (/usr/lib/initcpio/sshcs/)README.md for more information.
 EOF
 }
 
@@ -40,7 +39,6 @@ post_remove() {
     Remove the 'ip=' kernel command parameter from the bootloader configuration.
 
     In the 'HOOKS' section of '/etc/mkinitcpio.conf', remove 'ssh-cryptsetup'.
-
     Then rebuild the initramfs: 'mkinitcpio -p linux'
 EOF
 }
